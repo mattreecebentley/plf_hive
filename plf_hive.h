@@ -28,9 +28,10 @@
 #include <memory> // std::allocator
 #include <iterator> // std::bidirectional_iterator_tag, iterator_traits, make_move_iterator, std::distance for range insert
 #include <stdexcept> // std::length_error
+#include <functional> // std::less
 
 #include <cstddef> // offsetof, used in blank()
-#include <type_traits> // std::is_trivially_destructible, etc
+#include <type_traits> // std::is_trivially_destructible, enable_if_t, etc
 #include <utility> // std::move
 #include <initializer_list>
 #include <concepts>
@@ -1348,7 +1349,7 @@ private:
 
 	iterator 				end_iterator, begin_iterator;
 	group_pointer_type	groups_with_erasures_list_head,	// Head of the singly-linked list of groups which have erased-element memory locations available for re-use
-								unused_groups_head;					// Head of singly-linked list of groups retained by erase() or created by reserve()
+								unused_groups_head;					// Head of singly-linked list of groups retained by erase()/clear() or created by reserve()
 	size_type				total_size, total_capacity;
 
 	struct ebco_pair2 : tuple_allocator_type // Packaging the element pointer allocator with a lesser-used member variable, for empty-base-class optimisation
@@ -2788,14 +2789,14 @@ public:
 
 		--total_size;
 
-		if (it.group_pointer->size-- != 1) // ie. non-empty group at this point in time, don't consolidate - optimization note: GCC optimizes postfix - 1 comparison better than prefix - 1 comparison in many cases.
+		if (it.group_pointer->size-- != 1) // ie. non-empty group at this point in time, don't consolidate - optimization note: GCC optimizes postfix - 1 comparison better than prefix - 1 comparison in some cases.
 		{
 			// Code logic for following section:
 			// ---------------------------------
-			// If current skipfield node has no skipped node on either side, continue as usual
-			// If node only has skipped node on left, set current node and start node of the skipblock to left node value + 1.
-			// If node only has skipped node on right, make this node the start node of the skipblock and update end node
-			// If node has skipped nodes on left and right, set start node of left skipblock and end node of right skipblock to the values of the left + right nodes + 1
+			// If current skipfield node has no skipblock on either side, create new skipblock of size 1
+			// If node only has skipblock on left, set current node and start node of the skipblock to left node value + 1.
+			// If node only has skipblock on right, make this node the start node of the skipblock and update end node
+			// If node has skipblocks on left and right, set start node of left skipblock and end node of right skipblock to the values of the left + right nodes + 1
 
 			// Optimization explanation:
 			// The contextual logic below is the same as that in the insert() functions but in this case the value of the current skipfield node will always be
