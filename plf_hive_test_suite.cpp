@@ -173,7 +173,7 @@ int main()
 
 			total = 0;
 
-			for(hive<int *>::iterator the_iterator = p_hive.begin(); the_iterator != p_hive.end(); ++the_iterator)
+			for(hive<int *>::iterator the_iterator = hive_copy.begin(); the_iterator != hive_copy.end(); ++the_iterator)
 			{
 				++total;
 			}
@@ -187,10 +187,8 @@ int main()
 			failpass("Iterator next test", distance(p_hive.begin(), next_iterator) == 5);
 			failpass("Const iterator prev test", distance(p_hive.cend(), prev_iterator) == -300);
 
-			#if defined(__cplusplus) && __cplusplus >= 201402L
-				hive<int *>::iterator prev_iterator2 = prev(p_hive.end(), 300);
-				failpass("Iterator/Const iterator equality operator test", prev_iterator == prev_iterator2);
-			#endif
+			hive<int *>::iterator prev_iterator2 = prev(p_hive.end(), 300);
+			failpass("Iterator/Const iterator equality operator test", prev_iterator == prev_iterator2);
 
 			prev_iterator = p_hive.begin();
 			advance(prev_iterator, 5);
