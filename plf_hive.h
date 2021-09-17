@@ -1592,20 +1592,20 @@ public:
 
 	// Range constructor - differing iterators:
 
-// 	template <class iterator_type1, class iterator_type2>
-// 		requires (!std::same_as<iterator_type1, iterator_type2> && std::equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
-// 	hive(const iterator_type1 &first, const iterator_type2 &last, const plf::hive_limits capacities = plf::hive_limits(PLF_MIN_BLOCK_CAPACITY, std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
-// 		allocator_type(alloc),
-// 		groups_with_erasures_list_head(NULL),
-// 		unused_groups_head(NULL),
-// 		total_size(0),
-// 		total_capacity(0),
-// 		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-// 		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
-// 	{
-// 		check_capacities_conformance(capacities);
-// 		assign<iterator_type1, iterator_type2>(first, last);
-// 	}
+	template <class iterator_type1, class iterator_type2>
+		requires (!std::same_as<iterator_type1, iterator_type2> && std::equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
+	hive(const iterator_type1 &first, const iterator_type2 &last, const plf::hive_limits capacities = plf::hive_limits(PLF_MIN_BLOCK_CAPACITY, std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
+		allocator_type(alloc),
+		groups_with_erasures_list_head(NULL),
+		unused_groups_head(NULL),
+		total_size(0),
+		total_capacity(0),
+		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
+		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+	{
+		check_capacities_conformance(capacities);
+		assign<iterator_type1, iterator_type2>(first, last);
+	}
 
 
 
