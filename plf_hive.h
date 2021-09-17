@@ -42,6 +42,35 @@ namespace plf
 {
 
 
+#ifndef(PLF_CONCEPTS_DEFINED)
+	#define PLF_CONCEPTS_DEFINED
+	template<class type1>
+	concept convertable_to_bool = std::convertible_to<type1, bool>;
+
+
+
+	template<class type1>
+	concept boolean_testable = convertable_to_bool<type1> &&
+	   requires (type1 &&b)
+	{
+		{ !std::forward<type1>(b) } -> convertable_to_bool;
+	};
+
+
+
+	template<class type1, class type2>
+	concept actually_equality_comparable_with =
+		requires(const std::remove_reference_t<type1> &t1, const std::remove_reference_t<type2> &t2)
+	{
+		{ t1 == t2 } -> boolean_testable;
+		{ t1 != t2 } -> boolean_testable;
+		{ t2 == t1 } -> boolean_testable;
+		{ t2 != t1 } -> boolean_testable;
+	};
+#endif
+
+
+
 struct hive_limits // for use in block_capacity setting/getting functions and constructors
 {
 	size_t min, max;
@@ -1593,7 +1622,7 @@ public:
 	// Range constructor - differing iterators:
 
 	template <class iterator_type1, class iterator_type2>
-		requires (!std::same_as<iterator_type1, iterator_type2> && std::equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
+		requires (!std::same_as<iterator_type1, iterator_type2> && plf::actually_equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
 	hive(const iterator_type1 &first, const iterator_type2 &last, const plf::hive_limits capacities = plf::hive_limits(PLF_MIN_BLOCK_CAPACITY, std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		groups_with_erasures_list_head(NULL),
@@ -2687,14 +2716,14 @@ public:
 
 	// Range insert for differing iterator types eg. sentinels:
 
-// 	template <class iterator_type1, class iterator_type2>
-// 		requires (!std::same_as<iterator_type1, iterator_type2> && std::equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
-// 	inline void insert (const iterator_type1 first, const iterator_type2 last)
-// 	{
-// 		size_type distance = 0;
-// 		for(iterator_type1 current = first; current != last; ++current, ++distance) {};
-// 		range_insert(first, distance);
-// 	}
+ 	template <class iterator_type1, class iterator_type2>
+ 		requires (!std::same_as<iterator_type1, iterator_type2> && plf::actually_equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
+ 	inline void insert (const iterator_type1 first, const iterator_type2 last)
+ 	{
+ 		size_type distance = 0;
+ 		for(iterator_type1 current = first; current != last; ++current, ++distance) {};
+ 		range_insert(first, distance);
+ 	}
 
 
 
@@ -3458,14 +3487,14 @@ public:
 
 	// Range insert for differing iterator types eg. sentinels:
 
-// 	template <class iterator_type1, class iterator_type2>
-// 		requires (!std::same_as<iterator_type1, iterator_type2> && std::equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
-// 	inline void assign (const iterator_type1 first, const iterator_type2 last)
-// 	{
-// 		size_type distance = 0;
-// 		for(iterator_type1 current = first; current != last; ++current, ++distance) {};
-// 		range_assign(first, distance);
-// 	}
+ 	template <class iterator_type1, class iterator_type2>
+ 		requires (!std::same_as<iterator_type1, iterator_type2> && plf::actually_equality_comparable_with<iterator_type1, iterator_type2> && !std::integral<iterator_type1> && !std::integral<iterator_type2>)
+ 	inline void assign (const iterator_type1 first, const iterator_type2 last)
+ 	{
+ 		size_type distance = 0;
+ 		for(iterator_type1 current = first; current != last; ++current, ++distance) {};
+ 		range_assign(first, distance);
+ 	}
 
 
 
