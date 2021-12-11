@@ -21,7 +21,7 @@
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
 
-#include <algorithm> // std::fill_n, std::sort
+#include <algorithm> // std::fill_n, std::sort, std::lexicographical_compare_three_way
 #include <cassert>	// assert
 #include <cstring>	// memset, memcpy, size_t
 #include <limits>  // std::numeric_limits
@@ -3692,6 +3692,13 @@ public:
 	friend bool operator != (const hive &lh, const hive &rh)
 	{
 		return !(lh == rh);
+	}
+
+
+
+	friend auto operator <=> (const hive &lh, const hive &rh)
+	{
+		return std::lexicographical_compare_three_way(lh.begin(), lh.end(), rh.begin(), rh.end());
 	}
 
 

@@ -214,6 +214,8 @@ int main()
 
 			failpass("Inequality operator test", p_hive2 != p_hive3);
 
+			failpass("Spaceship operator test", (p_hive2 <=> p_hive3) != 0);
+
 			numtotal = 0;
 			total = 0;
 
