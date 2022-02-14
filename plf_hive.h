@@ -127,7 +127,7 @@ private:
 
 
 	//  groups:
-	struct group : private aligned_struct_allocator_type	// ebco - inherit allocator functions
+	struct group
 	{
 		aligned_pointer_type 				last_endpoint; 			// The address which is one-past the highest cell number that's been used so far in this group - does not change via erasure but may change via insertion/emplacement/assignment (if no previously-erased locations are available to insert to). This variable is necessary because an iterator cannot access the hive's end_iterator. It is probably the most-used variable in general hive usage (being heavily used in operator ++, --), so is first in struct. If all cells in the group have been inserted into at some point, it will be == reinterpret_cast<aligned_pointer_type>(skipfield).
 		group_pointer_type					next_group; 				// Next group in the intrusive list of all groups. NULL if no next group.
@@ -143,9 +143,9 @@ private:
 
 		// Group elements allocation explanation: memory has to be allocated as an aligned type in order to align with memory boundaries correctly (as opposed to being allocated as char or uint_8). Unfortunately this makes combining the element memory block and the skipfield memory block into one allocation (which increases performance) a little more tricky. Specifically it means in many cases the allocation will amass more memory than is needed, particularly if the element type is large.
 
-		group(const skipfield_type elements_per_group, group_pointer_type const previous):
+		group(aligned_struct_allocator_type& alloc,const skipfield_type elements_per_group, group_pointer_type const previous):
 			last_endpoint(reinterpret_cast<aligned_pointer_type>(
-			std::allocator_traits<aligned_struct_allocator_type>::allocate(*this, PLF_GROUP_ALIGNED_BLOCK_SIZE(elements_per_group), (previous == NULL) ? 0 : previous->elements))), /* Because this variable occurs first in the struct, we allocate here initially, then increment its value in the element initialisation below. As opposed to doing a secondary assignment in the code */
+			std::allocator_traits<aligned_struct_allocator_type>::allocate(alloc, PLF_GROUP_ALIGNED_BLOCK_SIZE(elements_per_group), (previous == NULL) ? 0 : previous->elements))), /* Because this variable occurs first in the struct, we allocate here initially, then increment its value in the element initialisation below. As opposed to doing a secondary assignment in the code */
 			next_group(NULL),
 			elements(last_endpoint++),
 			skipfield(reinterpret_cast<skipfield_pointer_type>(elements + elements_per_group)),
@@ -174,13 +174,14 @@ private:
 			std::memset(&*skipfield, 0, sizeof(skipfield_type) * static_cast<size_type>(capacity)); // capacity + 1 is not necessary here as the end skipfield is never written to after initialization
 		}
 
-
+		// Null check not necessary (for copied group as above) as deallocate will also perform a null check.
+		void deallocate(aligned_struct_allocator_type& alloc)
+		{
+			std::allocator_traits<aligned_struct_allocator_type>::deallocate(alloc, reinterpret_cast<aligned_struct_pointer_type>(elements), PLF_GROUP_ALIGNED_BLOCK_SIZE(capacity));
+		}
 
 		~group() noexcept
-		{
-			// Null check not necessary (for copied group as above) as deallocate will also perform a null check.
-			std::allocator_traits<aligned_struct_allocator_type>::deallocate(*this, reinterpret_cast<aligned_struct_pointer_type>(elements), PLF_GROUP_ALIGNED_BLOCK_SIZE(capacity));
-		}
+		{}
 	};
 
 
@@ -1435,7 +1436,7 @@ public:
 	// Copy constructor:
 
 	hive(const hive &source):
-		allocator_type(source),
+		allocator_type(std::allocator_traits<allocator_type>::select_on_container_copy_construction(source)),
 		groups_with_erasures_list_head(NULL),
 		unused_groups_head(NULL),
 		total_size(0),
@@ -1702,10 +1703,10 @@ private:
 	group_pointer_type allocate_new_group(group_allocator_type& group_allocator,const skipfield_type elements_per_group, group_pointer_type const previous = NULL)
 	{
 		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, 0);
-
+		aligned_struct_allocator_type aligned_struct_allocator(group_allocator);
 		try
 		{
-			std::allocator_traits<group_allocator_type>::construct(group_allocator, new_group, elements_per_group, previous);
+			std::allocator_traits<group_allocator_type>::construct(group_allocator,new_group,aligned_struct_allocator,elements_per_group, previous);
 		}
 		catch (...)
 		{
@@ -1718,8 +1719,12 @@ private:
 
 
 
-	inline void deallocate_group(group_allocator_type& group_allocator,group_pointer_type const the_group) noexcept
+	inline void deallocate_group(group_allocator_type& group_allocator,
+								 group_pointer_type const the_group) noexcept
 	{
+		aligned_struct_allocator_type aligned_struct_allocator(group_allocator);
+
+		the_group->deallocate(aligned_struct_allocator);
 		std::allocator_traits<group_allocator_type>::destroy(group_allocator, the_group);
 		std::allocator_traits<group_allocator_type>::deallocate(group_allocator, the_group, 1);
 	}
@@ -1892,7 +1897,7 @@ public:
 						}
 						catch (...)
 						{
-							deallocate_group(next_group);
+							deallocate_group(group_allocator,next_group);
 							throw;
 						}
 					}
