@@ -1354,13 +1354,13 @@ private:
 								unused_groups_head;					// Head of singly-linked list of groups retained by erase()/clear() or created by reserve()
 	size_type				total_size, total_capacity;
 
-	struct ebco_pair2 : tuple_allocator_type // Packaging the element pointer allocator with a lesser-used member variable, for empty-base-class optimisation
+	struct ebco_pair2  // Packaging the element pointer allocator with a lesser-used member variable, for empty-base-class optimisation
 	{
 		skipfield_type min_group_capacity;
 		explicit ebco_pair2(const skipfield_type min_elements) noexcept: min_group_capacity(min_elements) {}
 	}							tuple_allocator_pair;
 
-	struct ebco_pair : group_allocator_type
+	struct ebco_pair
 	{
 		skipfield_type max_group_capacity;
 		explicit ebco_pair(const skipfield_type max_elements) noexcept: max_group_capacity(max_elements) {}
@@ -1708,17 +1708,17 @@ public:
 private:
 
 
-	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, group_pointer_type const previous = NULL)
+	group_pointer_type allocate_new_group(group_allocator_type& group_allocator,const skipfield_type elements_per_group, group_pointer_type const previous = NULL)
 	{
-		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator_pair, 1, 0);
+		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, 0);
 
 		try
 		{
-			std::allocator_traits<group_allocator_type>::construct(group_allocator_pair, new_group, elements_per_group, previous);
+			std::allocator_traits<group_allocator_type>::construct(group_allocator, new_group, elements_per_group, previous);
 		}
 		catch (...)
 		{
-			std::allocator_traits<group_allocator_type>::deallocate(group_allocator_pair, new_group, 1);
+			std::allocator_traits<group_allocator_type>::deallocate(group_allocator, new_group, 1);
 			throw;
 		}
 
@@ -1727,10 +1727,10 @@ private:
 
 
 
-	inline void deallocate_group(group_pointer_type const the_group) noexcept
+	inline void deallocate_group(group_allocator_type& group_allocator,group_pointer_type const the_group) noexcept
 	{
-		std::allocator_traits<group_allocator_type>::destroy(group_allocator_pair, the_group);
-		std::allocator_traits<group_allocator_type>::deallocate(group_allocator_pair, the_group, 1);
+		std::allocator_traits<group_allocator_type>::destroy(group_allocator, the_group);
+		std::allocator_traits<group_allocator_type>::deallocate(group_allocator, the_group, 1);
 	}
 
 
@@ -1740,7 +1740,7 @@ private:
 		if (begin_iterator.group_pointer != NULL)
 		{
 			end_iterator.group_pointer->next_group = unused_groups_head;
-
+			group_allocator_type group_allocator(*this);
 			if constexpr (!std::is_trivially_destructible<element_type>::value)
 			{
 				if (total_size != 0)
@@ -1757,7 +1757,7 @@ private:
 						} while(begin_iterator.element_pointer != end_pointer); // ie. beyond end of available data
 
 						const group_pointer_type next_group = begin_iterator.group_pointer->next_group;
-						deallocate_group(begin_iterator.group_pointer);
+						deallocate_group(group_allocator,begin_iterator.group_pointer);
 						begin_iterator.group_pointer = next_group;
 
 						if (next_group == unused_groups_head)
@@ -1774,7 +1774,7 @@ private:
 			while (begin_iterator.group_pointer != NULL)
 			{
 				const group_pointer_type next_group = begin_iterator.group_pointer->next_group;
-				deallocate_group(begin_iterator.group_pointer);
+				deallocate_group(group_allocator,begin_iterator.group_pointer);
 				begin_iterator.group_pointer = next_group;
 			}
 		}
@@ -1784,7 +1784,9 @@ private:
 
 	void initialize(const skipfield_type first_group_size)
 	{
-		end_iterator.group_pointer = begin_iterator.group_pointer = allocate_new_group(first_group_size);
+
+		group_allocator_type group_allocator(*this);
+		end_iterator.group_pointer = begin_iterator.group_pointer = allocate_new_group(group_allocator,first_group_size);
 		end_iterator.element_pointer = begin_iterator.element_pointer = begin_iterator.group_pointer->elements;
 		end_iterator.skipfield_pointer = begin_iterator.skipfield_pointer = begin_iterator.group_pointer->skipfield;
 		total_capacity = first_group_size;
@@ -1883,7 +1885,9 @@ public:
 				if (unused_groups_head == NULL)
 				{
 					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+
+					group_allocator_type group_allocator(*this);
+					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
 
 					if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
 					{
@@ -1967,6 +1971,7 @@ public:
 		{
 			if (groups_with_erasures_list_head == NULL)
 			{
+
 				if (end_iterator.element_pointer != reinterpret_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield))
 				{
 					const iterator return_iterator = end_iterator;
@@ -1990,11 +1995,11 @@ public:
 				}
 
 				group_pointer_type next_group;
-
 				if (unused_groups_head == NULL)
 				{
 					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+					group_allocator_type group_allocator(*this);
+					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
 
 					if constexpr (std::is_nothrow_move_constructible<element_type>::value)
 					{
@@ -2008,7 +2013,9 @@ public:
 						}
 						catch (...)
 						{
-							deallocate_group(next_group);
+
+							group_allocator_type group_allocator(*this);
+							deallocate_group(group_allocator,next_group);
 							throw;
 						}
 					}
@@ -2104,8 +2111,10 @@ public:
 
 				if (unused_groups_head == NULL)
 				{
+
+					group_allocator_type group_allocator(*this);
 					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
 
 					if constexpr (std::is_nothrow_constructible<element_type>::value)
 					{
@@ -2119,7 +2128,7 @@ public:
 						}
 						catch (...)
 						{
-							deallocate_group(next_group);
+							deallocate_group(group_allocator,next_group);
 							throw;
 						}
 					}
@@ -2929,7 +2938,9 @@ public:
 			}
 
 			total_capacity -= it.group_pointer->capacity;
-			deallocate_group(it.group_pointer);
+
+			group_allocator_type group_allocator(*this);
+			deallocate_group(group_allocator,it.group_pointer);
 
 			// note: end iterator only needs to be changed if the deleted group was the final group in the chain ie. not in this case
 			begin_iterator.element_pointer = begin_iterator.group_pointer->elements + *(begin_iterator.group_pointer->skipfield); // If the beginning index has been erased (ie. skipfield != 0), skip to next non-erased element
@@ -2952,7 +2963,9 @@ public:
 			if (it.group_pointer->next_group != end_iterator.group_pointer)
 			{
 				total_capacity -= it.group_pointer->capacity;
-				deallocate_group(it.group_pointer);
+
+				group_allocator_type group_allocator(*this);
+				deallocate_group(group_allocator,it.group_pointer);
 			}
 			else
 			{
@@ -3132,7 +3145,9 @@ public:
 				if (current_group != end_iterator.group_pointer && current_group->next_group != end_iterator.group_pointer)
 				{
 					total_capacity -= current_group->capacity;
-					deallocate_group(current_group);
+
+					group_allocator_type group_allocator(*this);
+					deallocate_group(group_allocator,current_group);
 				}
 				else
 				{
@@ -3329,7 +3344,8 @@ public:
 				return end_iterator;
 			}
 
-			deallocate_group(current.group_pointer);
+			group_allocator_type group_allocator(*this);
+			deallocate_group(group_allocator,current.group_pointer);
 		}
 
 		return iterator2;
@@ -3358,6 +3374,7 @@ private:
 			// Remove surplus groups which're under the difference limit:
 			group_pointer_type current_group = begin_iterator.group_pointer, previous_group = NULL;
 
+			group_allocator_type group_allocator(*this);
 			do
 			{
 				const group_pointer_type next_group = current_group->next_group;
@@ -3366,7 +3383,7 @@ private:
 				{ // Remove group:
 					difference -= current_group->capacity;
 					total_capacity -= current_group->capacity;
-					deallocate_group(current_group);
+					deallocate_group(group_allocator,current_group);
 
 					if (current_group == begin_iterator.group_pointer)
 					{
@@ -3722,11 +3739,13 @@ public:
 
 	void trim() noexcept
 	{
+
+		group_allocator_type group_allocator(*this);
 		while(unused_groups_head != NULL)
 		{
 			total_capacity -= unused_groups_head->capacity;
 			const group_pointer_type next_group = unused_groups_head->next_group;
-			deallocate_group(unused_groups_head);
+			deallocate_group(group_allocator,unused_groups_head);
 			unused_groups_head = next_group;
 		}
 	}
@@ -3764,6 +3783,8 @@ public:
 
 		group_pointer_type current_group, first_unused_group;
 
+		group_allocator_type group_allocator(*this);
+
 		if (begin_iterator.group_pointer == NULL) // Most common scenario - empty hive
 		{
 			initialize(remainder);
@@ -3776,14 +3797,14 @@ public:
 			}
 			else
 			{
-				first_unused_group = current_group = allocate_new_group(group_allocator_pair.max_group_capacity, begin_iterator.group_pointer);
+				first_unused_group = current_group = allocate_new_group(group_allocator,group_allocator_pair.max_group_capacity, begin_iterator.group_pointer);
 				total_capacity += group_allocator_pair.max_group_capacity;
 				--number_of_max_groups;
 			}
 		}
 		else // Non-empty hive, add first group:
 		{
-			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
+			first_unused_group = current_group = allocate_new_group(group_allocator,remainder, end_iterator.group_pointer);
 			total_capacity += remainder;
 		}
 
@@ -3792,11 +3813,11 @@ public:
 		{
 			try
 			{
-				current_group->next_group = allocate_new_group(group_allocator_pair.max_group_capacity, current_group);
+				current_group->next_group = allocate_new_group(group_allocator,group_allocator_pair.max_group_capacity, current_group);
 			}
 			catch (...)
 			{
-				deallocate_group(current_group->next_group);
+				deallocate_group(group_allocator,current_group->next_group);
 				current_group->next_group = unused_groups_head;
 				unused_groups_head = first_unused_group;
 				throw;
@@ -4025,8 +4046,8 @@ public:
 		{
 			return;
 		}
-
-		tuple_pointer_type const sort_array = std::allocator_traits<tuple_allocator_type>::allocate(tuple_allocator_pair, total_size, NULL);
+		tuple_allocator_type tuple_allocator (*this);
+		tuple_pointer_type const sort_array = std::allocator_traits<tuple_allocator_type>::allocate(tuple_allocator, total_size, NULL);
 		tuple_pointer_type tuple_pointer = sort_array;
 
 		// Construct pointers to all elements in the sequence:
@@ -4034,7 +4055,7 @@ public:
 
 		for (iterator current_element = begin_iterator; current_element != end_iterator; ++current_element, ++tuple_pointer, ++index)
 		{
-			std::allocator_traits<tuple_allocator_type>::construct(tuple_allocator_pair, tuple_pointer, &*current_element, index);
+			std::allocator_traits<tuple_allocator_type>::construct(tuple_allocator, tuple_pointer, &*current_element, index);
 		}
 
 		// Now, sort the pointers by the values they point to:
@@ -4063,7 +4084,7 @@ public:
 			}
 		}
 
-		std::allocator_traits<tuple_allocator_type>::deallocate(tuple_allocator_pair, sort_array, total_size);
+		std::allocator_traits<tuple_allocator_type>::deallocate(tuple_allocator, sort_array, total_size);
 	}
 
 
