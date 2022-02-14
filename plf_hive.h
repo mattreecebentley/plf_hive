@@ -126,7 +126,7 @@ private:
 	typedef typename std::allocator_traits<tuple_allocator_type>::pointer				tuple_pointer_type;
 
 
-	// Colony groups:
+	//  groups:
 	struct group : private aligned_struct_allocator_type	// ebco - inherit allocator functions
 	{
 		aligned_pointer_type 				last_endpoint; 			// The address which is one-past the highest cell number that's been used so far in this group - does not change via erasure but may change via insertion/emplacement/assignment (if no previously-erased locations are available to insert to). This variable is necessary because an iterator cannot access the hive's end_iterator. It is probably the most-used variable in general hive usage (being heavily used in operator ++, --), so is first in struct. If all cells in the group have been inserted into at some point, it will be == reinterpret_cast<aligned_pointer_type>(skipfield).
@@ -1347,24 +1347,15 @@ public:
 
 private:
 
-	// Colony Member variables:
+	//  Member variables:
 
 	iterator 				end_iterator, begin_iterator;
 	group_pointer_type	groups_with_erasures_list_head,	// Head of the singly-linked list of groups which have erased-element memory locations available for re-use
 								unused_groups_head;					// Head of singly-linked list of groups retained by erase()/clear() or created by reserve()
 	size_type				total_size, total_capacity;
 
-	struct ebco_pair2  // Packaging the element pointer allocator with a lesser-used member variable, for empty-base-class optimisation
-	{
-		skipfield_type min_group_capacity;
-		explicit ebco_pair2(const skipfield_type min_elements) noexcept: min_group_capacity(min_elements) {}
-	}							tuple_allocator_pair;
-
-	struct ebco_pair
-	{
-		skipfield_type max_group_capacity;
-		explicit ebco_pair(const skipfield_type max_elements) noexcept: max_group_capacity(max_elements) {}
-	}							group_allocator_pair;
+	skipfield_type min_group_capacity;
+	skipfield_type max_group_capacity;
 
 
 
@@ -1393,8 +1384,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(std::numeric_limits<skipfield_type>::max())
+		min_group_capacity(PLF_MIN_BLOCK_CAPACITY),
+		max_group_capacity(std::numeric_limits<skipfield_type>::max())
 	{}
 
 
@@ -1405,8 +1396,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 	}
@@ -1421,8 +1412,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(PLF_MIN_BLOCK_CAPACITY),
-		group_allocator_pair(std::numeric_limits<skipfield_type>::max())
+		min_group_capacity(PLF_MIN_BLOCK_CAPACITY),
+		max_group_capacity(std::numeric_limits<skipfield_type>::max())
 	{}
 
 
@@ -1433,8 +1424,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 	}
@@ -1449,11 +1440,11 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>((source.tuple_allocator_pair.min_group_capacity > source.total_size) ? source.tuple_allocator_pair.min_group_capacity : ((source.total_size > source.group_allocator_pair.max_group_capacity) ? source.group_allocator_pair.max_group_capacity : source.total_size))), // min group size is set to value closest to total number of elements in source hive in order to not create unnecessary small groups in the range-insert below, then reverts to the original min group size afterwards. This effectively saves a call to reserve.
-		group_allocator_pair(source.group_allocator_pair.max_group_capacity)
+		min_group_capacity(static_cast<skipfield_type>((source.min_group_capacity > source.total_size) ? source.min_group_capacity : ((source.total_size > source.max_group_capacity) ? source.max_group_capacity : source.total_size))), // min group size is set to value closest to total number of elements in source hive in order to not create unnecessary small groups in the range-insert below, then reverts to the original min group size afterwards. This effectively saves a call to reserve.
+		max_group_capacity(source.max_group_capacity)
 	{ // can skip checking for skipfield conformance here as the skipfields must be equal between the destination and source, and source will have already had theirs checked. Same applies for other copy and move constructors below
 		range_assign(source.begin_iterator, source.total_size);
-		tuple_allocator_pair.min_group_capacity = source.tuple_allocator_pair.min_group_capacity; // reset to correct value for future operations
+		min_group_capacity = source.min_group_capacity; // reset to correct value for future operations
 	}
 
 
@@ -1466,11 +1457,11 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>((source.tuple_allocator_pair.min_group_capacity > source.total_size) ? source.tuple_allocator_pair.min_group_capacity : ((source.total_size > source.group_allocator_pair.max_group_capacity) ? source.group_allocator_pair.max_group_capacity : source.total_size))),
-		group_allocator_pair(source.group_allocator_pair.max_group_capacity)
+		min_group_capacity(static_cast<skipfield_type>((source.min_group_capacity > source.total_size) ? source.min_group_capacity : ((source.total_size > source.max_group_capacity) ? source.max_group_capacity : source.total_size))),
+		max_group_capacity(source.max_group_capacity)
 	{
 		range_assign(source.begin_iterator, source.total_size);
-		tuple_allocator_pair.min_group_capacity = source.tuple_allocator_pair.min_group_capacity;
+		min_group_capacity = source.min_group_capacity;
 	}
 
 
@@ -1481,7 +1472,7 @@ private:
 	{
 		if constexpr (std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)	// if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
 		{
-			std::memset(static_cast<void *>(this), 0, offsetof(hive, tuple_allocator_pair));
+			std::memset(static_cast<void *>(this), 0, offsetof(hive, min_group_capacity));
 		}
 		else
 		{
@@ -1512,8 +1503,8 @@ public:
 		unused_groups_head(std::move(source.unused_groups_head)),
 		total_size(source.total_size),
 		total_capacity(source.total_capacity),
-		tuple_allocator_pair(source.tuple_allocator_pair.min_group_capacity),
-		group_allocator_pair(source.group_allocator_pair.max_group_capacity)
+		min_group_capacity(source.min_group_capacity),
+		max_group_capacity(source.max_group_capacity)
 	{
 		assert(&source != this);
 		source.blank();
@@ -1531,8 +1522,8 @@ public:
 		unused_groups_head(std::move(source.unused_groups_head)),
 		total_size(source.total_size),
 		total_capacity(source.total_capacity),
-		tuple_allocator_pair(source.tuple_allocator_pair.min_group_capacity),
-		group_allocator_pair(source.group_allocator_pair.max_group_capacity)
+		min_group_capacity(source.min_group_capacity),
+		max_group_capacity(source.max_group_capacity)
 	{
 		assert(&source != this);
 		source.blank();
@@ -1548,8 +1539,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 		assign(fill_number, element);
@@ -1565,8 +1556,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 		assign(fill_number, element_type());
@@ -1583,8 +1574,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 		assign<iterator_type>(first, last);
@@ -1602,8 +1593,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 		assign<iterator_type, sentinel>(first, last);
@@ -1619,8 +1610,8 @@ public:
 		unused_groups_head(NULL),
 		total_size(0),
 		total_capacity(0),
-		tuple_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		min_group_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_group_capacity(static_cast<skipfield_type>(capacities.max))
 	{
 		check_capacities_conformance(capacities);
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
@@ -1884,7 +1875,7 @@ public:
 
 				if (unused_groups_head == NULL)
 				{
-					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
+					const skipfield_type new_group_size = (total_size < static_cast<size_type>(max_group_capacity)) ? static_cast<skipfield_type>(total_size) : max_group_capacity;
 
 					group_allocator_type group_allocator(*this);
 					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
@@ -1938,7 +1929,7 @@ public:
 		}
 		else // ie. newly-constructed hive, no insertions yet and no groups
 		{
-			initialize(tuple_allocator_pair.min_group_capacity);
+			initialize(min_group_capacity);
 
 			if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
 			{
@@ -1997,7 +1988,7 @@ public:
 				group_pointer_type next_group;
 				if (unused_groups_head == NULL)
 				{
-					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
+					const skipfield_type new_group_size = (total_size < static_cast<size_type>(max_group_capacity)) ? static_cast<skipfield_type>(total_size) : max_group_capacity;
 					group_allocator_type group_allocator(*this);
 					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
 
@@ -2051,7 +2042,7 @@ public:
 		}
 		else
 		{
-			initialize(tuple_allocator_pair.min_group_capacity);
+			initialize(min_group_capacity);
 
 			if constexpr (std::is_nothrow_move_constructible<element_type>::value)
 			{
@@ -2113,7 +2104,7 @@ public:
 				{
 
 					group_allocator_type group_allocator(*this);
-					const skipfield_type new_group_size = (total_size < static_cast<size_type>(group_allocator_pair.max_group_capacity)) ? static_cast<skipfield_type>(total_size) : group_allocator_pair.max_group_capacity;
+					const skipfield_type new_group_size = (total_size < static_cast<size_type>(max_group_capacity)) ? static_cast<skipfield_type>(total_size) : max_group_capacity;
 					next_group = allocate_new_group(group_allocator,new_group_size, end_iterator.group_pointer);
 
 					if constexpr (std::is_nothrow_constructible<element_type>::value)
@@ -2164,7 +2155,7 @@ public:
 		}
 		else
 		{
-			initialize(tuple_allocator_pair.min_group_capacity);
+			initialize(min_group_capacity);
 
 			if constexpr (std::is_nothrow_constructible<element_type, arguments ...>::value)
 			{
@@ -3366,7 +3357,7 @@ private:
 			}
 		}
 
-		if (size < total_capacity && (total_capacity - size) >= tuple_allocator_pair.min_group_capacity)
+		if (size < total_capacity && (total_capacity - size) >= min_group_capacity)
 		{
 			size_type difference = total_capacity - size;
 			end_iterator.group_pointer->next_group = unused_groups_head;
@@ -3560,7 +3551,7 @@ private:
 	{
 		if constexpr (std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value)
 		{
-			hive temp(plf::hive_limits(tuple_allocator_pair.min_group_capacity, group_allocator_pair.max_group_capacity));
+			hive temp(plf::hive_limits(min_group_capacity, max_group_capacity));
 			temp.range_assign(std::make_move_iterator(begin_iterator), total_size);
 			*this = std::move(temp); // Avoid generating 2nd temporary
 		}
@@ -3580,13 +3571,13 @@ public:
 	void reshape(const plf::hive_limits capacities)
 	{
 		check_capacities_conformance(capacities);
-		tuple_allocator_pair.min_group_capacity = static_cast<skipfield_type>(capacities.min);
-		group_allocator_pair.max_group_capacity = static_cast<skipfield_type>(capacities.max);
+		min_group_capacity = static_cast<skipfield_type>(capacities.min);
+		max_group_capacity = static_cast<skipfield_type>(capacities.max);
 
 		// Need to check all group sizes here, because splice might append smaller blocks to the end of a larger block:
 		for (group_pointer_type current = begin_iterator.group_pointer; current != end_iterator.group_pointer; current = current->next_group)
 		{
-			if (current->capacity < tuple_allocator_pair.min_group_capacity || current->capacity > group_allocator_pair.max_group_capacity)
+			if (current->capacity < min_group_capacity || current->capacity > max_group_capacity)
 			{
 				if constexpr (!(std::is_copy_constructible<element_type>::value || std::is_move_constructible<element_type>::value))
 				{
@@ -3606,7 +3597,7 @@ public:
 
 	inline plf::hive_limits block_limits() const noexcept
 	{
-		return plf::hive_limits(static_cast<size_t>(tuple_allocator_pair.min_group_capacity), static_cast<size_t>(group_allocator_pair.max_group_capacity));
+		return plf::hive_limits(static_cast<size_t>(min_group_capacity), static_cast<size_t>(max_group_capacity));
 	}
 
 
@@ -3668,8 +3659,8 @@ public:
 			unused_groups_head =  std::move(source.unused_groups_head);
 			total_size = source.total_size;
 			total_capacity = source.total_capacity;
-			tuple_allocator_pair.min_group_capacity = source.tuple_allocator_pair.min_group_capacity;
-			group_allocator_pair.max_group_capacity = source.group_allocator_pair.max_group_capacity;
+			min_group_capacity = source.min_group_capacity;
+			max_group_capacity = source.max_group_capacity;
 		}
 
 		source.blank();
@@ -3766,18 +3757,18 @@ public:
 
 		new_capacity -= total_capacity;
 
-		size_type number_of_max_groups = new_capacity / group_allocator_pair.max_group_capacity;
-		skipfield_type remainder = static_cast<skipfield_type>(new_capacity - (number_of_max_groups * group_allocator_pair.max_group_capacity));
+		size_type number_of_max_groups = new_capacity / max_group_capacity;
+		skipfield_type remainder = static_cast<skipfield_type>(new_capacity - (number_of_max_groups * max_group_capacity));
 
 
 		if (remainder == 0)
 		{
-			remainder = group_allocator_pair.max_group_capacity;
+			remainder = max_group_capacity;
 			--number_of_max_groups;
 		}
-		else if (remainder < tuple_allocator_pair.min_group_capacity)
+		else if (remainder < min_group_capacity)
 		{
-			remainder = tuple_allocator_pair.min_group_capacity;
+			remainder = min_group_capacity;
 		}
 
 
@@ -3797,8 +3788,8 @@ public:
 			}
 			else
 			{
-				first_unused_group = current_group = allocate_new_group(group_allocator,group_allocator_pair.max_group_capacity, begin_iterator.group_pointer);
-				total_capacity += group_allocator_pair.max_group_capacity;
+				first_unused_group = current_group = allocate_new_group(group_allocator,max_group_capacity, begin_iterator.group_pointer);
+				total_capacity += max_group_capacity;
 				--number_of_max_groups;
 			}
 		}
@@ -3813,7 +3804,7 @@ public:
 		{
 			try
 			{
-				current_group->next_group = allocate_new_group(group_allocator,group_allocator_pair.max_group_capacity, current_group);
+				current_group->next_group = allocate_new_group(group_allocator,max_group_capacity, current_group);
 			}
 			catch (...)
 			{
@@ -3824,7 +3815,7 @@ public:
 			}
 
 			current_group = current_group->next_group;
-			total_capacity += group_allocator_pair.max_group_capacity;
+			total_capacity += max_group_capacity;
 			--number_of_max_groups;
 		}
 
@@ -3909,11 +3900,11 @@ public:
 
 
 		// Throw if incompatible group capacity found:
-		if (source.tuple_allocator_pair.min_group_capacity < tuple_allocator_pair.min_group_capacity || source.group_allocator_pair.max_group_capacity > group_allocator_pair.max_group_capacity)
+		if (source.min_group_capacity < min_group_capacity || source.max_group_capacity > max_group_capacity)
 		{
 			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != NULL; current_group = current_group->next_group)
 			{
-				if (current_group->capacity < tuple_allocator_pair.min_group_capacity || current_group->capacity > group_allocator_pair.max_group_capacity)
+				if (current_group->capacity < min_group_capacity || current_group->capacity > max_group_capacity)
 				{
 					throw std::length_error("A source memory block capacity is outside of the destination's minimum or maximum memory block capacity limits - please change either the source or the destination's min/max block capacity limits using reshape() before calling splice() in this case");
 				}
@@ -4118,7 +4109,7 @@ public:
 			const iterator 					swap_end_iterator = end_iterator, swap_begin_iterator = begin_iterator;
 			const group_pointer_type		swap_groups_with_erasures_list_head = groups_with_erasures_list_head, swap_unused_groups_head = unused_groups_head;
 			const size_type					swap_total_size = total_size, swap_total_capacity = total_capacity;
-			const skipfield_type 			swap_min_group_capacity = tuple_allocator_pair.min_group_capacity, swap_max_group_capacity = group_allocator_pair.max_group_capacity;
+			const skipfield_type 			swap_min_group_capacity = min_group_capacity, swap_max_group_capacity = max_group_capacity;
 
 			end_iterator = source.end_iterator;
 			begin_iterator = source.begin_iterator;
@@ -4126,8 +4117,8 @@ public:
 			unused_groups_head = source.unused_groups_head;
 			total_size = source.total_size;
 			total_capacity = source.total_capacity;
-			tuple_allocator_pair.min_group_capacity = source.tuple_allocator_pair.min_group_capacity;
-			group_allocator_pair.max_group_capacity = source.group_allocator_pair.max_group_capacity;
+			min_group_capacity = source.min_group_capacity;
+			max_group_capacity = source.max_group_capacity;
 
 			source.end_iterator = swap_end_iterator;
 			source.begin_iterator = swap_begin_iterator;
@@ -4135,8 +4126,8 @@ public:
 			source.unused_groups_head = swap_unused_groups_head;
 			source.total_size = swap_total_size;
 			source.total_capacity = swap_total_capacity;
-			source.tuple_allocator_pair.min_group_capacity = swap_min_group_capacity;
-			source.group_allocator_pair.max_group_capacity = swap_max_group_capacity;
+			source.min_group_capacity = swap_min_group_capacity;
+			source.max_group_capacity = swap_max_group_capacity;
 		}
 	}
 
