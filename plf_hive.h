@@ -1471,7 +1471,12 @@ private:
 
 	inline void blank() noexcept
 	{
-		if constexpr (std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)	// if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
+		if constexpr (
+			(std::is_trivially_destructible<allocator_type>::value ||
+			 std::is_empty<allocator_type>::value) &&
+			std::is_trivial<group_pointer_type>::value &&
+			std::is_trivial<aligned_pointer_type>::value &&
+			std::is_trivial<skipfield_pointer_type>::value)	// if all pointer types are trivial, we can just nuke it from orbit with memset (NULL is always 0 in C++):
 		{
 			std::memset(static_cast<void *>(this), 0, offsetof(hive, min_group_capacity));
 		}
@@ -3635,37 +3640,66 @@ public:
 		total_size = 0;
 	}
 
-
-
 	inline hive & operator = (const hive &source)
 	{
 		assert(&source != this);
-		range_assign(source.begin_iterator, source.total_size);
+
+		if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_copy_assignment::value)
+		{
+			auto srcalloc=source.get_allocator();
+			if(!std::allocator_traits<allocator_type>::is_always_equal::value && get_allocator()!=srcalloc)
+			{
+				reset();
+			}
+			static_cast<allocator_type&>(*this)=srcalloc;
+		}
+		range_assign(source.begin_iterator,source.total_size);
+
 		return *this;
 	}
-
-
 
 	// Move assignment
 	hive & operator = (hive &&source) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
 		assert(&source != this);
-		destroy_all_data();
 
-		if constexpr (std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
+		if(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value ||
+		   std::allocator_traits<allocator_type>::is_always_equal::value || get_allocator()==source.get_allocator())
 		{
-			std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
+			reset();
+			if constexpr (
+				(std::is_trivially_copyable<allocator_type>::value ||
+				 std::is_empty<allocator_type>::value) &&
+				std::is_trivial<group_pointer_type>::value &&
+				std::is_trivial<aligned_pointer_type>::value &&
+				std::is_trivial<skipfield_pointer_type>::value)
+			{
+				std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
+			}
+			else
+			{
+				end_iterator = std::move(source.end_iterator);
+				begin_iterator = std::move(source.begin_iterator);
+				groups_with_erasures_list_head = std::move(source.groups_with_erasures_list_head);
+				unused_groups_head =  std::move(source.unused_groups_head);
+				total_size = source.total_size;
+				total_capacity = source.total_capacity;
+				min_group_capacity = source.min_group_capacity;
+				max_group_capacity = source.max_group_capacity;
+				if constexpr(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+				{
+					static_cast<allocator_type&>(*this)=source.get_allocator();
+				}
+			}
 		}
 		else
 		{
-			end_iterator = std::move(source.end_iterator);
-			begin_iterator = std::move(source.begin_iterator);
-			groups_with_erasures_list_head = std::move(source.groups_with_erasures_list_head);
-			unused_groups_head =  std::move(source.unused_groups_head);
-			total_size = source.total_size;
-			total_capacity = source.total_capacity;
-			min_group_capacity = source.min_group_capacity;
-			max_group_capacity = source.max_group_capacity;
+			if constexpr(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+			{
+				reset();
+				static_cast<allocator_type&>(*this)=source.get_allocator();
+			}
+			range_assign(std::make_move_iterator(source.begin_iterator),source.total_size);
 		}
 
 		source.blank();
