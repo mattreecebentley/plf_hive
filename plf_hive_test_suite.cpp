@@ -387,13 +387,13 @@ int main()
 
 			failpass("Iterator != test", it2 != it1);
 
-			failpass("Iterator <=> test 1", (it2 <=> it1) == 1);
+			failpass("Iterator <=> test 1", (it2 <=> it1) == std::strong_ordering::greater);
 
-			failpass("Iterator <=> test 2", (it1 <=> it2) == -1);
+			failpass("Iterator <=> test 2", (it1 <=> it2) == std::strong_ordering::less);
 
 			it1 = it2;
 
-			failpass("Iterator <=> test 3", (it1 <=> it2) == 0);
+			failpass("Iterator <=> test 3", (it1 <=> it2) == std::strong_ordering::equal);
 		}
 
 
