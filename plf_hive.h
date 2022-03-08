@@ -366,11 +366,11 @@ public:
 		}
 
 
-
+		// Less-than etc operators retained as GCC11 codegen synthesis from <=> is slower and bulkier for same operations:
 		template <bool is_const_it>
 		inline bool operator > (const hive_iterator<is_const_it> &rh) const noexcept
 		{
-			return ((std::to_address(group_pointer) == std::to_address(rh.group_pointer)) & (std::to_address(element_pointer) > std::to_address(rh.element_pointer))) || (std::to_address(group_pointer) != std::to_address(rh.group_pointer) && group_pointer->group_number > rh.group_pointer->group_number);
+			return ((group_pointer == rh.group_pointer) & (std::to_address(element_pointer) > std::to_address(rh.element_pointer))) || (group_pointer != rh.group_pointer && group_pointer->group_number > rh.group_pointer->group_number);
 		}
 
 
@@ -465,18 +465,18 @@ public:
 			if (distance > 0) // ie. +=
 			{
 				// Code explanation:
-				// For the initial state of the iterator, we don't know how what elements have been erased before that element in that group.
+				// For the initial state of the iterator, we don't know which elements have been erased before that element in that group.
 				// So for the first group, we follow the following logic:
-				// 1. If no elements have been erased in the group, we do simple addition to progress either to within the group (if the distance is small enough) or the end of the group and subtract from distance accordingly.
-				// 2. If any of the first group elements have been erased, we manually iterate, as we don't know whether the erased elements occur before or after the initial iterator position, and we subtract 1 from the distance amount each time. Iteration continues until either distance becomes zero, or we reach the end of the group.
+				// 1. If no elements have been erased in the group, we do simple pointer addition to progress, either to within the group (if the distance is small enough) or the end of the group and subtract from distance accordingly.
+				// 2. If any of the first group's elements have been erased, we manually iterate, as we don't know whether the erased elements occur before or after the initial iterator position, and we subtract 1 from the distance amount each time we iterate. Iteration continues until either distance becomes zero, or we reach the end of the group.
 
 				// For all subsequent groups, we follow this logic:
-				// 1. If distance is larger than the total number of non-erased elements in a group, we skip that group and subtract the number of elements in that group from distance
+				// 1. If distance is larger than the total number of non-erased elements in a group, we skip that group and subtract the number of elements in that group from distance.
 				// 2. If distance is smaller than the total number of non-erased elements in a group, then:
-				//   a. if there're no erased elements in the group we simply add distance to group->elements to find the new location for the iterator
-				//   b. if there are erased elements in the group, we manually iterate and subtract 1 from distance on each iteration, until the new iterator location is found ie. distance = 0
+				//   a. If there are no erased elements in the group we simply add distance to group->elements to find the new location for the iterator.
+				//   b. If there are erased elements in the group, we manually iterate and subtract 1 from distance on each iteration, until the new iterator location is found ie. distance = 0.
 
-				// Note: incrementing element_pointer is avoided until necessary to avoid needless calculations
+				// Note: incrementing element_pointer is avoided until necessary to avoid needless calculations.
 
 				assert(!(element_pointer == group_pointer->last_endpoint && group_pointer->next_group == NULL)); // Check that we're not already at end()
 
@@ -786,6 +786,7 @@ public:
 
 			return distance;
 		}
+
 
 
 	public:
@@ -1377,17 +1378,12 @@ private:
 	}							aligned_allocator_pair;
 
 
-
-	// An adaptive minimum based around sizeof(element_type), sizeof(group) and sizeof(hive):
-	// To enable reinterpret_cast'ing when allocator supplies non-raw pointers (using bit_cast instead as this allows for potential constexpr usage of container):
+	// An adaptive minimum based around sizeof(aligned_element_type), sizeof(group) and sizeof(hive):
 	constexpr static inline skipfield_type get_minimum_block_capacity() noexcept
 	{
 		return static_cast<skipfield_type>((sizeof(aligned_element_type) * 8 > (sizeof(plf::hive<element_type>) + sizeof(group)) * 2) ?
 			8 : (((sizeof(plf::hive<element_type>) + sizeof(group)) * 2) / sizeof(aligned_element_type)));
 	}
-
-// 	#define PLF_MIN_BLOCK_CAPACITY (sizeof(aligned_element_type) * 8 > (sizeof(plf::hive<element_type>) + sizeof(group)) * 2) ? 8 : (((sizeof(plf::hive<element_type>) + sizeof(group)) * 2) / sizeof(aligned_element_type))
-
 
 
 	inline void check_capacities_conformance(plf::hive_limits capacities) const
@@ -1747,7 +1743,6 @@ private:
 
 	inline void deallocate_group(group_pointer_type const the_group) noexcept
 	{
-		// Null check not necessary as deallocate will also perform a null check.
 		std::allocator_traits<aligned_struct_allocator_type>::deallocate(aligned_allocator_pair, bitcast_pointer<aligned_struct_pointer_type>(the_group->elements), get_aligned_block_capacity(the_group->capacity));
 		std::allocator_traits<group_allocator_type>::deallocate(group_allocator_pair, the_group, 1);
 	}
@@ -1832,7 +1827,7 @@ private:
 			*(bitcast_pointer<skipfield_pointer_type>(new_location.element_pointer + 1)) = prev_free_list_index;
 			*(bitcast_pointer<skipfield_pointer_type>(new_location.element_pointer + 1) + 1) = std::numeric_limits<skipfield_type>::max();
 		}
-		else
+		else // single-node skipblock, remove skipblock
 		{
 			groups_with_erasures_list_head->free_list_head = prev_free_list_index;
 
@@ -1882,7 +1877,7 @@ public:
 					const iterator return_iterator = end_iterator; /* Make copy for return before modifying end_iterator */
 
 					if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
-					{ // For no good reason this compiles to ridiculously faster code under GCC 5-9 in raw small struct tests with large N:
+					{ // For no good reason this compiles to much faster code under GCC in raw small struct tests with large N:
 						std::allocator_traits<allocator_type>::construct(*this, bitcast_pointer<pointer>(end_iterator.element_pointer++), element);
 						end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
 					}
@@ -1989,7 +1984,6 @@ public:
 		{
 			if (groups_with_erasures_list_head == NULL)
 			{
-
 				if (end_iterator.element_pointer != bitcast_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield))
 				{
 					const iterator return_iterator = end_iterator;
@@ -2233,7 +2227,7 @@ private:
 			{
 				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
 				{
-					alignas (alignof(aligned_element_type)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial copy object of same (but aligned) type
+					alignas (alignof(aligned_element_type)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
 					std::fill_n(end_iterator.element_pointer, size, *(bitcast_pointer<aligned_pointer_type>(&aligned_copy)));
 				}
 				else
@@ -2611,7 +2605,6 @@ private:
 			range_assign(it, size);
 			return;
 		}
-
 
 		reserve(total_size + size);
 
@@ -4132,7 +4125,6 @@ public:
 
 	void swap(hive &source) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_swap::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
-		// Note: if propagate_on_container_swap is false behaviour is undefined as per standard
 		assert(&source != this);
 
 		if constexpr (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
@@ -4173,7 +4165,7 @@ public:
 			source.group_allocator_pair.min_group_capacity = swap_min_group_capacity;
 			source.aligned_allocator_pair.max_group_capacity = swap_max_group_capacity;
 
-			if constexpr (!std::allocator_traits<allocator_type>::is_always_equal::value)
+			if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)
 			{
 				allocator_type swap_allocator = std::move(static_cast<allocator_type &>(source));
 				group_allocator_type swap_group_allocator = std::move(static_cast<group_allocator_type &>(source.group_allocator_pair));
@@ -4186,7 +4178,7 @@ public:
 				static_cast<allocator_type &>(*this) = std::move(swap_allocator);
 				static_cast<group_allocator_type &>(group_allocator_pair) = std::move(swap_group_allocator);
 				static_cast<aligned_struct_allocator_type &>(aligned_allocator_pair) = std::move(swap_aligned_allocator);
-			}
+			} // else: undefined behaviour, as per standard
 		}
 	}
 
