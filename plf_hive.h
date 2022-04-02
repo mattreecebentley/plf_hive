@@ -20,8 +20,9 @@
 
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
+#define __cpp_lib_hive
 
-#include <algorithm> // std::fill_n, std::sort, std::lexicographical_compare_three_way
+#include <algorithm> // std::fill_n, std::sort
 #include <cassert>	// assert
 #include <cstring>	// memset, memcpy, size_t
 #include <limits>  // std::numeric_limits
@@ -31,10 +32,11 @@
 #include <functional> // std::less
 
 #include <cstddef> // offsetof, used in blank()
-#include <type_traits> // std::is_trivially_destructible, enable_if_t, etc
+#include <type_traits> // std::is_trivially_destructible, enable_if_t, type_identity_t, etc
 #include <utility> // std::move
 #include <initializer_list>
 #include <concepts>
+#include <compare> // std::strong_ordering
 #include <bit> // std::bit_cast
 
 
@@ -109,8 +111,8 @@ private:
 	// We also check to see if alignment is larger than sizeof value_type and use alignment size if so:
 	static inline size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
-		return (((elements_per_group * (((sizeof(aligned_element_type) >= alignof(aligned_element_type)) ?
-			sizeof(aligned_element_type) : alignof(aligned_element_type)) + sizeof(skipfield_type))) + sizeof(skipfield_type)) + sizeof(aligned_allocation_struct) - 1)
+		return ((elements_per_group * (((sizeof(aligned_element_type) >= alignof(aligned_element_type)) ?
+			sizeof(aligned_element_type) : alignof(aligned_element_type)) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1)
 			/ sizeof(aligned_allocation_struct);
 	}
 
@@ -428,7 +430,8 @@ public:
 
 
 
-		friend inline hive_iterator next(const hive_iterator &it, const difference_type distance)
+		template <class distance_type>
+		friend inline hive_iterator next(const hive_iterator &it, const distance_type distance)
 		{
 			hive_iterator return_iterator(it);
 			return_iterator.advance(static_cast<difference_type>(distance));
@@ -437,7 +440,8 @@ public:
 
 
 
-		friend inline hive_iterator prev(const hive_iterator &it, const difference_type distance)
+		template <class distance_type>
+		friend inline hive_iterator prev(const hive_iterator &it, const distance_type distance)
 		{
 			hive_iterator return_iterator(it);
 			return_iterator.advance(-(static_cast<difference_type>(distance)));
@@ -1080,7 +1084,8 @@ public:
 
 
 
-		friend inline hive_reverse_iterator next(const hive_reverse_iterator &it, const difference_type distance)
+		template <class distance_type>
+		friend inline hive_reverse_iterator next(const hive_reverse_iterator &it, const distance_type distance)
 		{
 			hive_reverse_iterator return_iterator(it);
 			return_iterator.advance(static_cast<difference_type>(distance));
@@ -1090,7 +1095,7 @@ public:
 
 
 		template <class distance_type>
-		friend inline hive_reverse_iterator prev(const hive_reverse_iterator &it, const difference_type distance)
+		friend inline hive_reverse_iterator prev(const hive_reverse_iterator &it, const distance_type distance)
 		{
 			hive_reverse_iterator return_iterator(it);
 			return_iterator.advance(-(static_cast<difference_type>(distance)));
@@ -1473,7 +1478,7 @@ public:
 
 	// Copy constructor (allocator-extended):
 
-	hive(const hive &source, const allocator_type &alloc):
+	hive(const hive &source, const std::type_identity_t<allocator_type> &alloc):
 		allocator_type(alloc),
 		groups_with_erasures_list_head(NULL),
 		unused_groups_head(NULL),
@@ -1536,7 +1541,7 @@ public:
 
 	// Move constructor (allocator-extended):
 
-	hive(hive &&source, const allocator_type &alloc):
+	hive(hive &&source, const std::type_identity_t<allocator_type> &alloc):
 		allocator_type(alloc),
 		end_iterator(std::move(source.end_iterator)),
 		begin_iterator(std::move(source.begin_iterator)),
@@ -1798,7 +1803,6 @@ private:
 
 	void initialize(const skipfield_type first_group_size)
 	{
-
 		end_iterator.group_pointer = begin_iterator.group_pointer = allocate_new_group(first_group_size);
 		end_iterator.element_pointer = begin_iterator.element_pointer = begin_iterator.group_pointer->elements;
 		end_iterator.skipfield_pointer = begin_iterator.skipfield_pointer = begin_iterator.group_pointer->skipfield;
@@ -3603,9 +3607,16 @@ public:
 
 
 
-	inline plf::hive_limits block_limits() const noexcept
+	inline plf::hive_limits block_capacity_limits() const noexcept
 	{
 		return plf::hive_limits(static_cast<size_t>(group_allocator_pair.min_group_capacity), static_cast<size_t>(aligned_allocator_pair.max_group_capacity));
+	}
+
+
+
+	constexpr static inline plf::hive_limits block_capacity_hard_limits() noexcept
+	{
+		return plf::hive_limits(3, std::numeric_limits<skipfield_type>::max());
 	}
 
 
@@ -3712,40 +3723,6 @@ public:
 	{
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
 		return *this;
-	}
-
-
-
-	friend bool operator == (const hive &lh, const hive &rh)
-	{
-		if (lh.total_size != rh.total_size)
-		{
-			return false;
-		}
-
-		for (const_iterator lh_iterator = lh.begin_iterator, rh_iterator = rh.begin_iterator; lh_iterator != lh.end_iterator; ++lh_iterator, ++rh_iterator)
-		{
-			if (*lh_iterator != *rh_iterator)
-			{
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-
-
-	friend bool operator != (const hive &lh, const hive &rh)
-	{
-		return !(lh == rh);
-	}
-
-
-
-	friend std::strong_ordering operator <=> (const hive &lh, const hive &rh)
-	{
-		return std::lexicographical_compare_three_way(lh.begin(), lh.end(), rh.begin(), rh.end());
 	}
 
 
@@ -4086,7 +4063,7 @@ public:
 		}
 
 		// Now, sort the pointers by the values they point to:
-		std::sort(sort_array, sort_array + total_size, sort_dereferencer<comparison_function>(compare));
+		std::sort(sort_array, tuple_pointer, sort_dereferencer<comparison_function>(compare));
 
 		// Sort the actual elements via the tuple array:
 		index = 0;

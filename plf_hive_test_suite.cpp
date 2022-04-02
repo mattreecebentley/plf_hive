@@ -206,15 +206,7 @@ int main()
 			failpass("Copy construct test", p_hive3.size() == 400);
 			failpass("Allocator-extended copy construct test", p_hive4.size() == 400);
 
-
-			failpass("Equality operator test", p_hive == p_hive2);
-			failpass("Equality operator test 2", p_hive2 == p_hive3);
-
 			p_hive2.insert(&ten);
-
-			failpass("Inequality operator test", p_hive2 != p_hive3);
-
-			failpass("Spaceship operator test", (p_hive2 <=> p_hive3) != 0);
 
 			numtotal = 0;
 			total = 0;
@@ -448,7 +440,7 @@ int main()
 
 			i_hive.clear();
 			i_hive.trim();
-			i_hive.reshape(plf::hive_limits(10000, i_hive.block_limits().max));
+			i_hive.reshape(plf::hive_limits(10000, i_hive.block_capacity_limits().max));
 
 			i_hive.insert(30000, 1); // fill-insert 30000 elements
 
@@ -626,7 +618,7 @@ int main()
 
 			i_hive.clear();
 			i_hive.trim();
-			i_hive.reshape(plf::hive_limits(3, i_hive.block_limits().max));
+			i_hive.reshape(plf::hive_limits(3, i_hive.block_capacity_limits().max));
 
 			const unsigned int temp_capacity2 = static_cast<unsigned int>(i_hive.capacity());
 			i_hive.reserve(100000);
@@ -1422,9 +1414,13 @@ int main()
 
 			failpass("Reinitialize min-size test", hive1.capacity() == 200);
 
-			plf::hive_limits temp_limits = hive1.block_limits();
+			plf::hive_limits temp_limits = hive1.block_capacity_limits();
 
-			failpass("get_block_limits test", temp_limits.min == 200 && temp_limits.max == 2000);
+			failpass("get_block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 2000);
+
+			temp_limits = plf::hive<int>::block_capacity_hard_limits();
+
+			failpass("get_block_capacity_limits test", temp_limits.min == 3 && temp_limits.max == 65535);
 
 			for (int counter = 0; counter != 3300; ++counter)
 			{
