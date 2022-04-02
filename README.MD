@@ -9,3 +9,5 @@ The differences in plf::hive are as follows:
 
 Otherwise hive should follow the same rules as colony and be used in the same way. Colony documentation is here:
 https://plflib.org/colony.htm
+
+Support for C++20 ranges support is enabled by defining PLF_HIVE_RANGES_SUPPORT (presently working fine in GCC, not MSVC)
