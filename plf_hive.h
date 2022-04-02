@@ -39,6 +39,10 @@
 #include <compare> // std::strong_ordering
 #include <bit> // std::bit_cast
 
+#ifdef PLF_HIVE_RANGES_SUPPORT
+	#include <ranges>
+#endif
+
 
 
 namespace plf
@@ -1646,6 +1650,25 @@ public:
 
 
 
+	#ifdef PLF_HIVE_RANGES_SUPPORT
+		template<class range_type>
+			requires std::ranges::range<range_type>
+		hive(range_type &&the_range, const plf::hive_limits capacities = plf::hive_limits(get_minimum_block_capacity(), std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
+			allocator_type(alloc),
+			groups_with_erasures_list_head(NULL),
+			unused_groups_head(NULL),
+			total_size(0),
+			total_capacity(0),
+			group_allocator_pair(static_cast<skipfield_type>(capacities.min)),
+			aligned_allocator_pair(static_cast<skipfield_type>(capacities.max))
+		{
+			check_capacities_conformance(capacities);
+			range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
+		}
+	#endif
+
+
+
 	inline iterator begin() noexcept
 	{
 		return begin_iterator;
@@ -2740,6 +2763,17 @@ public:
 
 
 
+	#ifdef PLF_HIVE_RANGES_SUPPORT
+		template<class range_type>
+			requires std::ranges::range<range_type>
+		inline void insert(range_type &&the_range)
+		{
+			range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
+		}
+	#endif
+
+
+
 private:
 
 	inline void update_subsequent_group_numbers(group_pointer_type current_group) noexcept
@@ -3508,6 +3542,17 @@ public:
 	{
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
 	}
+
+
+
+	#ifdef PLF_HIVE_RANGES_SUPPORT
+		template<class range_type>
+			requires std::ranges::range<range_type>
+		inline void assign(range_type &&the_range)
+		{
+			range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
+		}
+	#endif
 
 
 

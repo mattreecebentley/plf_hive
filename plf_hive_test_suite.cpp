@@ -6,8 +6,9 @@
 #include <cstdlib> // abort
 #include <utility> // std::move
 
-#include "plf_hive.h"
+// #define PLF_HIVE_RANGES_SUPPORT
 
+#include "plf_hive.h"
 
 
 void message(const char *message_text)
@@ -1106,6 +1107,14 @@ int main()
 			hive<int> i_hive2(i_hive.begin(), i_hive.end());
 
 			failpass("Range constructor test", i_hive2.size() == 3);
+
+			#ifdef PLF_HIVE_RANGES_SUPPORT
+				std::ranges::take_view<std::ranges::ref_view<plf::hive<int>>> rng = i_hive2 | std::ranges::views::take(2);
+
+				hive<int> i_hive_range(rng);
+
+				failpass("Rangesv3 constructor test", i_hive_range.size() == 2);
+			#endif
 
 			hive<int> i_hive3(5000, 2, plf::hive_limits(100, 1000));
 
