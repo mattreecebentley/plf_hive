@@ -429,26 +429,24 @@ public:
 		template <class distance_type>
 		friend inline void advance(hive_iterator &it, distance_type distance)
 		{
-			it.advance(static_cast<difference_type>(distance));
+			it.advance(static_cast<hive_iterator::difference_type>(distance));
 		}
 
 
 
-		template <class distance_type>
-		friend inline hive_iterator next(const hive_iterator &it, const distance_type distance)
+		friend inline hive_iterator next(const hive_iterator &it, const hive_iterator::difference_type distance)
 		{
 			hive_iterator return_iterator(it);
-			return_iterator.advance(static_cast<difference_type>(distance));
+			return_iterator.advance(distance);
 			return return_iterator;
 		}
 
 
 
-		template <class distance_type>
-		friend inline hive_iterator prev(const hive_iterator &it, const distance_type distance)
+		friend inline hive_iterator prev(const hive_iterator &it, const hive_iterator::difference_type distance)
 		{
 			hive_iterator return_iterator(it);
-			return_iterator.advance(-(static_cast<difference_type>(distance)));
+			return_iterator.advance(-distance);
 			return return_iterator;
 		}
 
@@ -1083,26 +1081,24 @@ public:
 		template <class distance_type>
 		friend inline void advance(hive_reverse_iterator &it, distance_type distance)
 		{
-			it.advance(static_cast<difference_type>(distance));
+			it.advance(static_cast<hive_reverse_iterator::difference_type>(distance));
 		}
 
 
 
-		template <class distance_type>
-		friend inline hive_reverse_iterator next(const hive_reverse_iterator &it, const distance_type distance)
+		friend inline hive_reverse_iterator next(const hive_reverse_iterator &it, const hive_reverse_iterator::difference_type distance)
 		{
 			hive_reverse_iterator return_iterator(it);
-			return_iterator.advance(static_cast<difference_type>(distance));
+			return_iterator.advance(distance);
 			return return_iterator;
 		}
 
 
 
-		template <class distance_type>
-		friend inline hive_reverse_iterator prev(const hive_reverse_iterator &it, const distance_type distance)
+		friend inline hive_reverse_iterator prev(const hive_reverse_iterator &it, const hive_reverse_iterator::difference_type distance)
 		{
 			hive_reverse_iterator return_iterator(it);
-			return_iterator.advance(-(static_cast<difference_type>(distance)));
+			return_iterator.advance(-distance);
 			return return_iterator;
 		}
 
