@@ -2766,7 +2766,7 @@ public:
 	#ifdef PLF_HIVE_RANGES_SUPPORT
 		template<class range_type>
 			requires std::ranges::range<range_type>
-		inline void insert(range_type &&the_range)
+		inline void insert_range(range_type &&the_range)
 		{
 			range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
 		}
@@ -3548,7 +3548,7 @@ public:
 	#ifdef PLF_HIVE_RANGES_SUPPORT
 		template<class range_type>
 			requires std::ranges::range<range_type>
-		inline void assign(range_type &&the_range)
+		inline void assign_range(range_type &&the_range)
 		{
 			range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
 		}
