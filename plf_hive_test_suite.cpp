@@ -6,7 +6,7 @@
 #include <cstdlib> // abort
 #include <utility> // std::move
 
-// #define PLF_HIVE_RANGES_SUPPORT
+//#define PLF_HIVE_RANGES_SUPPORT
 
 #include "plf_hive.h"
 
@@ -440,7 +440,7 @@ int main()
 
 
 			i_hive.clear();
-			i_hive.trim();
+			i_hive.trim_capacity();
 			i_hive.reshape(plf::hive_limits(10000, i_hive.block_capacity_limits().max));
 
 			i_hive.insert(30000, 1); // fill-insert 30000 elements
@@ -618,7 +618,7 @@ int main()
 
 
 			i_hive.clear();
-			i_hive.trim();
+			i_hive.trim_capacity();
 			i_hive.reshape(plf::hive_limits(3, i_hive.block_capacity_limits().max));
 
 			const unsigned int temp_capacity2 = static_cast<unsigned int>(i_hive.capacity());
@@ -1076,6 +1076,25 @@ int main()
 
 			failpass("Less-than sort test", sorted);
 
+			i_hive.unique();
+
+
+			bool unique = true;
+			previous = -1;
+
+			for (hive<int>::iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				if (previous == *current)
+				{
+					unique = false;
+					break;
+				}
+
+				previous = *current;
+			}
+
+			failpass("Unique test", unique);
+
 			i_hive.sort(std::greater<int>());
 
 			previous = 65536;
@@ -1136,7 +1155,7 @@ int main()
 
 			i_hive3.clear();
 			i_hive2.clear();
-			i_hive2.trim();
+			i_hive2.trim_capacity();
 			i_hive2.reserve(50000);
 			i_hive2.insert(60000, 1);
 

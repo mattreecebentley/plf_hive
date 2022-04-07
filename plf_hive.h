@@ -56,11 +56,15 @@ struct hive_limits // for use in block_capacity setting/getting functions and co
 };
 
 
-enum class hive_priority { performance, memory_use };
+namespace hive_priority
+{
+	struct performance {};
+	struct memory_use {};
+}
 
 
 
-template <class element_type, class allocator_type = std::allocator<element_type>, plf::hive_priority priority = plf::hive_priority::performance> class hive : private allocator_type // Empty base class optimisation (EBCO) - inheriting allocator functions
+template <class element_type, class allocator_type = std::allocator<element_type>, class priority = plf::hive_priority::performance> class hive : private allocator_type // Empty base class optimisation (EBCO) - inheriting allocator functions
 {
 	// Type-switching pattern:
 	template <bool flag, class is_true, class is_false> struct choose;
@@ -75,7 +79,7 @@ template <class element_type, class allocator_type = std::allocator<element_type
 		typedef is_false type;
 	};
 
-	typedef typename choose<priority == plf::hive_priority::performance, unsigned short, unsigned char>::type		skipfield_type; // Note: unsigned short is equivalent to uint_least16_t ie. Using 16-bit unsigned integer in best-case scenario, greater-than-16-bit unsigned integer where platform doesn't support 16-bit types. unsigned char is always == 1 byte, as opposed to uint_8, which may not be
+	typedef typename choose<std::is_same_v<priority, plf::hive_priority::performance>, unsigned short, unsigned char>::type		skipfield_type; // Note: unsigned short is equivalent to uint_least16_t ie. Using 16-bit unsigned integer in best-case scenario, greater-than-16-bit unsigned integer where platform doesn't support 16-bit types. unsigned char is always == 1 byte, as opposed to uint_8, which may not be
 
 public:
 	// Standard container typedefs:
@@ -1449,7 +1453,7 @@ public:
 
 
 
-	explicit hive(const plf::hive_limits capacities, const allocator_type &alloc):
+	hive(const plf::hive_limits capacities, const allocator_type &alloc):
 		allocator_type(alloc),
 		groups_with_erasures_list_head(NULL),
 		unused_groups_head(NULL),
@@ -1581,7 +1585,7 @@ public:
 
 	// Default-value fill constructor:
 
-	explicit hive(const size_type fill_number, const plf::hive_limits capacities = plf::hive_limits(get_minimum_block_capacity(), std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
+	hive(const size_type fill_number, const plf::hive_limits capacities = plf::hive_limits(get_minimum_block_capacity(), std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		groups_with_erasures_list_head(NULL),
 		unused_groups_head(NULL),
@@ -1610,25 +1614,6 @@ public:
 	{
 		check_capacities_conformance(capacities);
 		assign<iterator_type>(first, last);
-	}
-
-
-
-	// Range constructor - sentinel support:
-
-	template <class iterator_type, class sentinel>
-		requires (!(std::convertible_to<sentinel, iterator_type> || std::convertible_to<iterator_type, sentinel> || std::integral<iterator_type> || std::integral<sentinel>) && std::sentinel_for<sentinel, iterator_type>)
-	hive(const iterator_type &first, const sentinel &last, const plf::hive_limits capacities = plf::hive_limits(get_minimum_block_capacity(), std::numeric_limits<skipfield_type>::max()), const allocator_type &alloc = allocator_type()):
-		allocator_type(alloc),
-		groups_with_erasures_list_head(NULL),
-		unused_groups_head(NULL),
-		total_size(0),
-		total_capacity(0),
-		group_allocator_pair(static_cast<skipfield_type>(capacities.min)),
-		aligned_allocator_pair(static_cast<skipfield_type>(capacities.max))
-	{
-		check_capacities_conformance(capacities);
-		assign<iterator_type, sentinel>(first, last);
 	}
 
 
@@ -2730,18 +2715,6 @@ public:
 
 
 
-	// Range insert for sentinels:
-
-	template <class iterator_type, class sentinel>
-		requires (!(std::convertible_to<sentinel, iterator_type> || std::convertible_to<iterator_type, sentinel> || std::integral<iterator_type> || std::integral<sentinel>) && std::sentinel_for<sentinel, iterator_type>)
- 	inline void insert (const iterator_type first, const sentinel last)
- 	{
- 		size_type distance = 0;
- 		for(iterator_type current = first; current != last; ++current, ++distance) {};
- 		range_insert(first, distance);
- 	}
-
-
 
 	// Range insert, move_iterator overload:
 
@@ -3512,19 +3485,6 @@ public:
 
 
 
-	// Range assign for use with sentinels:
-
-	template <class iterator_type, class sentinel>
-		requires (!(std::convertible_to<sentinel, iterator_type> || std::convertible_to<iterator_type, sentinel> || std::integral<iterator_type> || std::integral<sentinel>) && std::sentinel_for<sentinel, iterator_type>)
- 	inline void assign (const iterator_type first, const sentinel last)
- 	{
- 		size_type distance = 0;
- 		for(iterator_type current = first; current != last; ++current, ++distance) {};
- 		range_assign(first, distance);
- 	}
-
-
-
 	// Range assign, move_iterator overload:
 
 	template <class iterator_type>
@@ -3581,23 +3541,6 @@ public:
 	{
 		return total_capacity;
 	}
-
-
-
-	size_type memory() const noexcept
-	{
-		size_type memory_use = sizeof(*this); // sizeof hive basic structure
-		end_iterator.group_pointer->next_group = unused_groups_head; // temporarily link the main groups and unused groups (reserved groups) in order to only have one loop below instead of several
-
-		for(group_pointer_type current = begin_iterator.group_pointer; current != NULL; current = current->next_group)
-		{
-			memory_use += sizeof(group) + (get_aligned_block_capacity(current->capacity) * sizeof(aligned_allocation_struct)); // add memory block sizes and the size of the group structs themselves. The original calculation, including divisor, is necessary in order to correctly round up the number of allocations
-		}
-
-		end_iterator.group_pointer->next_group = NULL; // unlink main groups and unused groups
-		return memory_use;
-	}
-
 
 
 
@@ -3789,7 +3732,7 @@ public:
 
 
 
-	void trim() noexcept
+	void trim_capacity() noexcept
 	{
 		while(unused_groups_head != NULL)
 		{
@@ -3930,7 +3873,7 @@ public:
 
 
 
-	void splice(hive &source)
+	void splice(hive &&source)
 	{
 		// Process: if there are unused memory spaces at the end of the current back group of the chain, convert them
 		// to skipped elements and add the locations to the group's free list.
@@ -4046,8 +3989,15 @@ public:
 		total_capacity += source.total_capacity;
 
 		// Remove source unused groups:
-		source.trim();
+		source.trim_capacity();
 		source.blank();
+	}
+
+
+
+	inline void splice(hive &source)
+	{
+		splice(std::move(source));
 	}
 
 
@@ -4145,6 +4095,51 @@ public:
 
 
 
+	template <class comparison_function>
+	size_type unique(comparison_function compare)
+	{
+		size_type count = 0;
+
+		for(const_iterator current = cbegin(), end = cend(), previous; current != end;)
+		{
+			previous = current++;
+
+			if (compare(*current, *previous))
+			{
+				const size_type original_count = ++count;
+				const_iterator last(++const_iterator(current));
+
+				while(last != end && compare(*last, *previous))
+				{
+					++last;
+					++count;
+				}
+
+				if (count != original_count)
+				{
+					current = erase(current, last); // optimised range-erase
+				}
+				else
+				{
+					current = erase(current);
+				}
+
+				end = cend();
+			}
+		}
+
+		return count;
+	}
+
+
+
+	inline size_type unique()
+	{
+		return unique(std::equal_to<element_type>());
+	}
+
+
+
 	void swap(hive &source) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_swap::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
 		assert(&source != this);
@@ -4233,7 +4228,7 @@ struct hive_eq_to
 namespace std
 {
 
-	template <class element_type, class allocator_type, plf::hive_priority priority>
+	template <class element_type, class allocator_type, class priority>
 	inline void swap (plf::hive<element_type, allocator_type, priority> &a, plf::hive<element_type, allocator_type, priority> &b) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_swap::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
 		a.swap(b);
@@ -4241,7 +4236,7 @@ namespace std
 
 
 
-	template <class element_type, class allocator_type, plf::hive_priority priority, class predicate_function>
+	template <class element_type, class allocator_type, class priority, class predicate_function>
 	typename plf::hive<element_type, allocator_type, priority>::size_type erase_if(plf::hive<element_type, allocator_type, priority> &container, predicate_function predicate)
 	{
 		typedef typename plf::hive<element_type, allocator_type, priority> hive;
@@ -4249,7 +4244,9 @@ namespace std
 		typedef typename hive::size_type			size_type;
 		size_type count = 0;
 
-		for(const_iterator current = container.begin(), end = container.end(); current != end;)
+		const const_iterator end = container.cend();
+
+		for(const_iterator current = container.cbegin(); current != end; ++current)
 		{
 			if (predicate(*current))
 			{
@@ -4271,11 +4268,10 @@ namespace std
 					current = container.erase(current);
 				}
 
-				end = container.end();
-			}
-			else
-			{
-				++current;
+				if (current == container.cend()) // we want ++ to occur as we already know current doesn't satisfy the predicate, but if that happens we may skip over cend
+				{ // ps. this is the only situation where the const end above might've been invalidated
+					break;
+				}
 			}
 		}
 
@@ -4284,7 +4280,7 @@ namespace std
 
 
 
-	template <class element_type, class allocator_type, plf::hive_priority priority>
+	template <class element_type, class allocator_type, class priority>
 	inline typename plf::hive<element_type, allocator_type, priority>::size_type erase(plf::hive<element_type, allocator_type, priority> &container, const element_type &value)
 	{
 		return erase_if(container, plf::hive_eq_to<element_type>(value));
