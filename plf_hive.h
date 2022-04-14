@@ -66,20 +66,7 @@ namespace hive_priority
 
 template <class element_type, class allocator_type = std::allocator<element_type>, class priority = plf::hive_priority::performance> class hive : private allocator_type // Empty base class optimisation (EBCO) - inheriting allocator functions
 {
-	// Type-switching pattern:
-	template <bool flag, class is_true, class is_false> struct choose;
-
-	template <class is_true, class is_false> struct choose<true, is_true, is_false>
-	{
-		typedef is_true type;
-	};
-
-	template <class is_true, class is_false> struct choose<false, is_true, is_false>
-	{
-		typedef is_false type;
-	};
-
-	typedef typename choose<std::is_same_v<priority, plf::hive_priority::performance>, unsigned short, unsigned char>::type		skipfield_type; // Note: unsigned short is equivalent to uint_least16_t ie. Using 16-bit unsigned integer in best-case scenario, greater-than-16-bit unsigned integer where platform doesn't support 16-bit types. unsigned char is always == 1 byte, as opposed to uint_8, which may not be
+	typedef std::conditional_t<std::is_same_v<priority, plf::hive_priority::performance>, unsigned short, unsigned char>		skipfield_type; // Note: unsigned short is equivalent to uint_least16_t ie. Using 16-bit unsigned integer in best-case scenario, greater-than-16-bit unsigned integer where platform doesn't support 16-bit types. unsigned char is always == 1 byte, as opposed to uint_8, which may not be
 
 public:
 	// Standard container typedefs:
@@ -220,8 +207,8 @@ public:
 		typedef std::bidirectional_iterator_tag	iterator_category;
 		typedef typename hive::value_type 			value_type;
 		typedef typename hive::difference_type		difference_type;
-		typedef typename choose<is_const, typename hive::const_pointer, typename hive::pointer>::type		pointer;
-		typedef typename choose<is_const, typename hive::const_reference, typename hive::reference>::type	reference;
+		typedef std::conditional_t<is_const, typename hive::const_pointer, typename hive::pointer>		pointer;
+		typedef std::conditional_t<is_const, typename hive::const_reference, typename hive::reference>	reference;
 
 		friend class hive;
 		friend class hive_reverse_iterator<false>;
@@ -849,8 +836,8 @@ public:
 		typedef std::bidirectional_iterator_tag	iterator_category;
 		typedef typename hive::value_type 		value_type;
 		typedef typename hive::difference_type	difference_type;
-		typedef typename choose<r_is_const, typename hive::const_pointer, typename hive::pointer>::type		pointer;
-		typedef typename choose<r_is_const, typename hive::const_reference, typename hive::reference>::type	reference;
+		typedef std::conditional_t<r_is_const, typename hive::const_pointer, typename hive::pointer>		pointer;
+		typedef std::conditional_t<r_is_const, typename hive::const_reference, typename hive::reference>	reference;
 
 		friend class hive;
 
