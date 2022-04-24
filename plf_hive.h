@@ -52,7 +52,7 @@ namespace plf
 struct hive_limits // for use in block_capacity setting/getting functions and constructors
 {
 	size_t min, max;
-	hive_limits(const size_t minimum, const size_t maximum) noexcept : min(minimum), max(maximum) {}
+	constexpr hive_limits(const size_t minimum, const size_t maximum) noexcept : min(minimum), max(maximum) {}
 };
 
 
