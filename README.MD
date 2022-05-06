@@ -10,5 +10,3 @@ The differences in plf::hive are as follows:
 
 Otherwise hive should follow the same rules as colony and be used in the same way. Colony documentation is here:
 https://plflib.org/colony.htm
-
-NOTE: hive does not currently work in MSVC due to compilation bugs in that compiler - which have been reported to MS. GCC11 works fine.
