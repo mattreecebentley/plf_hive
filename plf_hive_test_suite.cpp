@@ -6,8 +6,6 @@
 #include <cstdlib> // abort
 #include <utility> // std::move
 
-//#define PLF_HIVE_RANGES_SUPPORT
-
 #include "plf_hive.h"
 
 
@@ -113,7 +111,6 @@ struct small_struct_non_trivial
 
 int main()
 {
-	using namespace std;
 	using namespace plf;
 
 
@@ -162,12 +159,12 @@ int main()
 			failpass("Iterator access test", numtotal == 6000);
 
 			hive<int *>::iterator plus_twenty = p_hive.begin();
-			advance(plus_twenty, 20);
+			std::advance(plus_twenty, 20);
 			hive<int *>::iterator plus_two_hundred = p_hive.begin();
-			advance(plus_two_hundred, 200);
+			std::advance(plus_two_hundred, 200);
 
-			failpass("Iterator + distance test", distance(p_hive.begin(), plus_twenty) == 20);
-			failpass("Iterator - distance test", distance(plus_two_hundred, p_hive.begin()) == -200);
+			failpass("Iterator + distance test", std::distance(p_hive.begin(), plus_twenty) == 20);
+			failpass("Iterator - distance test", std::distance(plus_two_hundred, p_hive.begin()) == -200);
 
 			hive<int *>::const_iterator plus_two_hundred_c = plus_two_hundred;
 			hive<int *> hive_copy(plus_twenty, plus_two_hundred_c);
@@ -182,17 +179,17 @@ int main()
 			failpass("Range-constructor with differing iterator types test", total == 180);
 
 
-			hive<int *>::iterator next_iterator = next(p_hive.begin(), 5);
-			hive<int *>::const_iterator prev_iterator = prev(p_hive.cend(), 300);
+			hive<int *>::iterator next_iterator = std::next(p_hive.begin(), 5);
+			hive<int *>::const_iterator prev_iterator = std::prev(p_hive.cend(), 300);
 
-			failpass("Iterator next test", distance(p_hive.begin(), next_iterator) == 5);
-			failpass("Const iterator prev test", distance(p_hive.cend(), prev_iterator) == -300);
+			failpass("Iterator next test", std::distance(p_hive.begin(), next_iterator) == 5);
+			failpass("Const iterator prev test", std::distance(p_hive.cend(), prev_iterator) == -300);
 
-			hive<int *>::iterator prev_iterator2 = prev(p_hive.end(), 300);
+			hive<int *>::iterator prev_iterator2 = std::prev(p_hive.end(), 300);
 			failpass("Iterator/Const iterator equality operator test", prev_iterator == prev_iterator2);
 
 			prev_iterator = p_hive.begin();
-			advance(prev_iterator, 5);
+			std::advance(prev_iterator, 5);
 			failpass("Iterator/Const iterator equality operator test 2", prev_iterator == next_iterator);
 
 			hive<int *> p_hive2;
@@ -223,18 +220,18 @@ int main()
 			failpass("Reverse iterator access test", numtotal == 6000);
 
 			hive<int *>::reverse_iterator r_iterator = p_hive.rbegin();
-			advance(r_iterator, 50);
+			std::advance(r_iterator, 50);
 
-			failpass("Reverse iterator advance and distance test", distance(p_hive.rbegin(), r_iterator) == 50);
+			failpass("Reverse iterator advance and distance test", std::distance(p_hive.rbegin(), r_iterator) == 50);
 
-			hive<int *>::reverse_iterator r_iterator2 = next(r_iterator, 2);
+			hive<int *>::reverse_iterator r_iterator2 = std::next(r_iterator, 2);
 
-			failpass("Reverse iterator next and distance test", distance(p_hive.rbegin(), r_iterator2) == 52);
+			failpass("Reverse iterator next and distance test", std::distance(p_hive.rbegin(), r_iterator2) == 52);
 
 			numtotal = 0;
 			total = 0;
 
-			for(hive<int *>::iterator the_iterator = p_hive.begin(); the_iterator < p_hive.end(); advance(the_iterator, 2))
+			for(hive<int *>::iterator the_iterator = p_hive.begin(); the_iterator < p_hive.end(); std::advance(the_iterator, 2))
 			{
 				++total;
 				numtotal += **the_iterator;
@@ -279,6 +276,13 @@ int main()
 			failpass("Partial erase iteration test", total == 200);
 			failpass("Post-erase size test", p_hive.size() == 200);
 
+			{
+				hive<int> trim_hive(2000, 10, {200, 200});
+				trim_hive.reserve(4000);
+				trim_hive.trim_capacity(1000);
+				failpass("trim_capacity(n) test", trim_hive.capacity() == 3000);
+			}
+
 			const unsigned int temp_capacity = static_cast<unsigned int>(p_hive.capacity());
 			p_hive.shrink_to_fit();
 			failpass("Shrink_to_fit test", p_hive.capacity() < temp_capacity);
@@ -314,7 +318,7 @@ int main()
 
 			total = 0;
 
-			for(hive<int *>::iterator the_iterator = --(hive<int *>::iterator(p_hive.end())); the_iterator != p_hive.begin(); advance(the_iterator, -2))
+			for(hive<int *>::iterator the_iterator = --(hive<int *>::iterator(p_hive.end())); the_iterator != p_hive.begin(); std::advance(the_iterator, -2))
 			{
 				++total;
 			}
@@ -441,7 +445,7 @@ int main()
 
 			i_hive.clear();
 			i_hive.trim_capacity();
-			i_hive.reshape(plf::hive_limits(10000, i_hive.block_capacity_limits().max));
+			i_hive.reshape(plf::hive_limits(100, i_hive.block_capacity_limits().max));
 
 			i_hive.insert(30000, 1); // fill-insert 30000 elements
 
@@ -517,7 +521,7 @@ int main()
 
 			failpass("Insert post-erase test", i_hive.size() == 500000);
 			hive<int>::iterator it2 = i_hive.begin();
-			advance(it2, 250000);
+			std::advance(it2, 250000);
 
 
 			for (; it2 != i_hive.end();)
@@ -531,7 +535,7 @@ int main()
 
 			hive<int>::iterator end_iterator = i_hive.end();
 			hive<int>::iterator end_iterator2 = i_hive.end();
-			advance(end_iterator, -250000);
+			std::advance(end_iterator, -250000);
 
 			for (unsigned int count = 0; count != 250000; ++count, --end_iterator2){}
 			failpass("Large multi-decrement iterator test 1", end_iterator == end_iterator2);
@@ -558,9 +562,9 @@ int main()
 
 
 			end_iterator = i_hive.end();
-			advance(end_iterator, -50001);
+			std::advance(end_iterator, -50001);
 			hive<int>::iterator begin_iterator = i_hive.begin();
-			advance(begin_iterator, 300000);
+			std::advance(begin_iterator, 300000);
 
 			for (hive<int>::iterator the_iterator = begin_iterator; the_iterator != end_iterator;)
 			{
@@ -573,7 +577,7 @@ int main()
 			i_hive.insert(100000, 10);
 
 			begin_iterator = i_hive.begin();
-			advance(begin_iterator, 300001);
+			std::advance(begin_iterator, 300001);
 
 
 			for (hive<int>::iterator the_iterator = begin_iterator; the_iterator != i_hive.end();)
@@ -584,16 +588,16 @@ int main()
 			failpass("Non-beginning increment + erase test", i_hive.size() == 300001);
 
 			hive<int>::iterator temp_iterator = i_hive.begin();
-			advance(temp_iterator, 20); // Advance test 1
+			std::advance(temp_iterator, 20); // Advance test 1
 
-			unsigned int index = static_cast<unsigned int>(distance(i_hive.begin(), temp_iterator));
+			unsigned int index = static_cast<unsigned int>(std::distance(i_hive.begin(), temp_iterator));
 			failpass("Advance + iterator-to-index test", index == 20);
 
 			i_hive.erase(temp_iterator);
 			temp_iterator = i_hive.begin(); // Check edge-case with advance when erasures present in initial group
-			advance(temp_iterator, 500);
+			std::advance(temp_iterator, 500);
 
-			index = static_cast<unsigned int>(distance(i_hive.begin(), temp_iterator));
+			index = static_cast<unsigned int>(std::distance(i_hive.begin(), temp_iterator));
 
 			failpass("Advance + iterator-to-index test", index == 500);
 
@@ -604,7 +608,7 @@ int main()
 			failpass("Const_pointer-to-const_iterator test", temp3 != i_hive.end());
 
 			temp2 = i_hive.begin();
-			advance(temp2, 500);
+			std::advance(temp2, 500);
 
 			failpass("Index-to-iterator test", temp2 == temp_iterator);
 
@@ -679,8 +683,8 @@ int main()
 
 			hive<int>::iterator it1 = i_hive.begin(), it2 = i_hive.begin();
 
-			advance(it1, 500);
-			advance(it2, 800);
+			std::advance(it1, 500);
+			std::advance(it2, 800);
 
 			i_hive.erase(it1, it2);
 
@@ -696,8 +700,8 @@ int main()
 
 			it1 = it2 = i_hive.begin();
 
-			advance(it1, 400);
-			advance(it2, 500); // This should put it2 past the point of previous erasures
+			std::advance(it1, 400);
+			std::advance(it2, 500); // This should put it2 past the point of previous erasures
 
 			i_hive.erase(it1, it2);
 
@@ -714,8 +718,8 @@ int main()
 
 			it2 = it1 = i_hive.begin();
 
-			advance(it1, 4);
-			advance(it2, 9); // This should put it2 past the point of previous erasures
+			std::advance(it1, 4);
+			std::advance(it2, 9); // This should put it2 past the point of previous erasures
 
 			i_hive.erase(it1, it2);
 
@@ -733,7 +737,7 @@ int main()
 
 			it2 = it1 = i_hive.begin();
 
-			advance(it2, 50);
+			std::advance(it2, 50);
 
 			i_hive.erase(it1, it2);
 
@@ -752,7 +756,7 @@ int main()
 			it1 = i_hive.begin();
 			it2 = i_hive.end();
 
-			advance(it1, 345); // Test erasing and validity when it removes the final group in hive
+			std::advance(it1, 345); // Test erasing and validity when it removes the final group in hive
 			i_hive.erase(it1, it2);
 
 			counter = 0;
@@ -780,8 +784,8 @@ int main()
 
 			it2 = it1 = i_hive.begin();
 
-			advance(it1, 4);
-			advance(it2, 600);
+			std::advance(it1, 4);
+			std::advance(it2, 600);
 			i_hive.erase(it1, it2);
 
 			counter = 0;
@@ -821,7 +825,7 @@ int main()
 			it1 = i_hive.begin();
 			it2 = i_hive.end();
 
-			advance(it1, 400);
+			std::advance(it1, 400);
 			i_hive.erase(it1, it2);
 
 			counter = 0;
@@ -855,8 +859,8 @@ int main()
 					size = static_cast<unsigned int>(i_hive.size());
 					range1 = rand() % size;
 					range2 = range1 + 1 + (rand() % (size - range1));
-					advance(it1, static_cast<int>(range1));
-					advance(it2, static_cast<int>(range2));
+					std::advance(it1, static_cast<int>(range1));
+					std::advance(it2, static_cast<int>(range2));
 
 					i_hive.erase(it1, it2);
 
@@ -902,8 +906,8 @@ int main()
 					size = static_cast<unsigned int>(i_hive.size());
 					range1 = rand() % size;
 					range2 = range1 + 1 + (rand() % (size - range1));
-					advance(it1, static_cast<int>(range1));
-					advance(it2, static_cast<int>(range2));
+					std::advance(it1, static_cast<int>(range1));
+					std::advance(it2, static_cast<int>(range2));
 
 					i_hive.erase(it1, it2);
 
@@ -1011,8 +1015,8 @@ int main()
 					size = static_cast<unsigned int>(ss_nt.size());
 					range1 = rand() % size;
 					range2 = range1 + 1 + (rand() % (size - range1));
-					advance(ss_it1, static_cast<int>(range1));
-					advance(ss_it2, static_cast<int>(range2));
+					std::advance(ss_it1, static_cast<int>(range1));
+					std::advance(ss_it2, static_cast<int>(range2));
 
 					ss_nt.erase(ss_it1, ss_it2);
 
@@ -1127,15 +1131,13 @@ int main()
 
 			failpass("Range constructor test", i_hive2.size() == 3);
 
-			#ifdef PLF_HIVE_RANGES_SUPPORT
-				std::ranges::take_view<std::ranges::ref_view<plf::hive<int>>> rng = i_hive2 | std::ranges::views::take(2);
+			std::ranges::take_view<std::ranges::ref_view<plf::hive<int>>> rng = i_hive2 | std::ranges::views::take(2);
 
-				hive<int> i_hive_range(rng);
+			hive<int> i_hive_range(rng);
 
-				failpass("Rangesv3 constructor test", i_hive_range.size() == 2);
-			#endif
+			failpass("Rangesv3 constructor test", i_hive_range.size() == 2);
 
-			hive<int> i_hive3(5000, 2, plf::hive_limits(100, 1000));
+			hive<int> i_hive3(5000, 2, plf::hive_limits(100, 250));
 
 			failpass("Fill construction test", i_hive3.size() == 5000);
 
@@ -1152,6 +1154,10 @@ int main()
  			i_hive2.insert(some_ints.begin(), some_ints.cend());
 
  			failpass("Range insertion with differing iterators test", i_hive2.size() == 501003);
+
+ 			i_hive3.insert(std::move(i_hive2.begin()), std::move(i_hive2.cend()));
+
+ 			failpass("Range move-insertion test", i_hive3.size() == 506003);
 
 			i_hive3.clear();
 			i_hive2.clear();
@@ -1436,34 +1442,34 @@ int main()
 			failpass("Change_group_sizes max-size test", hive1.capacity() == 200);
 
 			hive1.clear();
-			hive1.reshape(plf::hive_limits(200, 2000));
+			hive1.reshape(plf::hive_limits(200, 255));
 
 			hive1.insert(27);
 
-			failpass("Reinitialize min-size test", hive1.capacity() == 200);
+			failpass("Reshape min-size test", hive1.capacity() == 200);
 
 			plf::hive_limits temp_limits = hive1.block_capacity_limits();
 
-			failpass("get_block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 2000);
+			failpass("get_block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 255);
 
 			temp_limits = plf::hive<int>::block_capacity_hard_limits();
 
-			failpass("get_block_capacity_limits test", temp_limits.min == 3 && temp_limits.max == 65535);
+			failpass("get_block_capacity_limits test", temp_limits.min == 3 && temp_limits.max == 255);
 
 			for (int counter = 0; counter != 3300; ++counter)
 			{
 				hive1.insert(counter);
 			}
 
-			failpass("Reinitialize max-size test", hive1.capacity() == 5200);
+			failpass("Reshape max-size test", hive1.capacity() == 3460);
 
-			hive1.reshape(plf::hive_limits(500, 500));
+			hive1.reshape(plf::hive_limits(150, 150));
 
-			failpass("Change_group_sizes resize test", hive1.capacity() == 3500);
+			failpass("Reshape test 3", hive1.capacity() == 3450);
 
 			hive1.reshape(plf::hive_limits(200, 200));
 
-			failpass("Change_maximum_group_size resize test", hive1.capacity() == 3400);
+			failpass("Reshape test 4", hive1.capacity() == 3400);
 
 		}
 
@@ -1764,23 +1770,18 @@ int main()
 				hive1.erase(--(hive1.end()));
 				hive2.erase(--(hive2.end()));
 
-				hive1.splice(hive2); // splice should swap the order at this point due to differences in numbers of unused elements at end of final group in each hive
+				const unsigned int total = hive1.size() + hive2.size();
 
-				int check_number = -1;
-				bool fail = false;
+				hive1.splice(hive2);
+
+				unsigned int check_number = 0;
 
 				for (hive<int>::iterator current = hive1.begin(); current != hive1.end(); ++current)
 				{
-					if (check_number >= *current)
-					{
-						fail = true;
-						break;
-					}
-
-					check_number = *current;
+					++check_number;
 				}
 
-				failpass("Large unequal size + erase splice test 1", fail == false);
+				failpass("Large unequal size + erase splice test 1", check_number == total);
 
 
 				do
