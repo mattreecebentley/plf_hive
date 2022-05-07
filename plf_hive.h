@@ -30,7 +30,6 @@
 #include <iterator> // std::bidirectional_iterator_tag, iterator_traits, make_move_iterator, std::distance for range insert
 #include <stdexcept> // std::length_error
 #include <functional> // std::less
-
 #include <cstddef> // offsetof, used in blank()
 #include <type_traits> // std::is_trivially_destructible, enable_if_t, type_identity_t, etc
 #include <utility> // std::move
@@ -38,7 +37,6 @@
 #include <concepts>
 #include <compare> // std::strong_ordering
 #include <bit> // std::bit_cast
-
 #include <ranges>
 
 
@@ -88,6 +86,7 @@ namespace std
 
 
 
+
 namespace plf
 {
 
@@ -102,7 +101,7 @@ struct hive_limits // for use in block_capacity setting/getting functions and co
 
 template <class element_type, class allocator_type = std::allocator<element_type> > class hive : private allocator_type // Empty base class optimisation (EBCO) - inheriting allocator functions
 {
-	typedef std::conditional_t<(sizeof(element_type) > 10), uint_least16_t, uint_least8_t> skipfield_type; 
+	typedef std::conditional_t<(sizeof(element_type) > 10), uint_least16_t, uint_least8_t> skipfield_type;
 
 public:
 	// Standard container typedefs:
@@ -120,14 +119,14 @@ public:
 	template <bool is_const> class		hive_iterator;
 	typedef hive_iterator<false>			iterator;
 	typedef hive_iterator<true> 			const_iterator;
-	friend class hive_iterator<false>; // Using above typedef name here is illegal under C++03
-	friend class hive_iterator<true>;
+	friend iterator;
+	friend const_iterator;
 
-	template <bool is_const_r> class 	hive_reverse_iterator;
-	typedef hive_reverse_iterator<false> reverse_iterator;
-	typedef hive_reverse_iterator<true>	const_reverse_iterator;
-	friend class hive_reverse_iterator<false>;
-	friend class hive_reverse_iterator<true>;
+	template <bool is_const_r> class			hive_reverse_iterator;
+	typedef hive_reverse_iterator<false>	reverse_iterator;
+	typedef hive_reverse_iterator<true>		const_reverse_iterator;
+	friend reverse_iterator;
+	friend const_reverse_iterator;
 
 
 
@@ -151,7 +150,7 @@ private:
 
 	// To enable reinterpret_cast'ing when allocator supplies non-raw pointers (using bit_cast instead as this allows for potential constexpr usage of container):
 	template <class destination_pointer_type, class source_pointer_type>
-	static constexpr inline destination_pointer_type bitcast_pointer(const source_pointer_type source_pointer) noexcept
+	static constexpr destination_pointer_type bitcast_pointer(const source_pointer_type source_pointer) noexcept
 	{
 		return std::bit_cast<destination_pointer_type>(std::to_address(source_pointer));
 	}
@@ -208,7 +207,6 @@ private:
 			erasures_list_next_group(NULL),
 			group_number((previous == NULL) ? 0 : previous->group_number + 1u)
 		{
-			// Static casts to unsigned int from short not necessary as C++ automatically promotes lesser types for arithmetic purposes.
 			std::memset(bitcast_pointer<void *>(skipfield), 0, sizeof(skipfield_type) * (static_cast<size_type>(elements_per_group) + 1u));
 		}
 
@@ -419,7 +417,8 @@ public:
 		template <bool is_const_it>
 		inline bool operator > (const hive_iterator<is_const_it> &rh) const noexcept
 		{
-			return ((group_pointer == rh.group_pointer) & (std::greater()(std::to_address(element_pointer), std::to_address(rh.element_pointer)))) || (group_pointer != rh.group_pointer && group_pointer->group_number > rh.group_pointer->group_number);
+			return ((group_pointer == rh.group_pointer) & std::greater()(std::to_address(element_pointer), std::to_address(rh.element_pointer))) ||
+				(group_pointer != rh.group_pointer && group_pointer->group_number > rh.group_pointer->group_number);
 		}
 
 
@@ -1340,7 +1339,7 @@ private:
 
 
 	// Adaptive minimum based around sizeof(aligned_element_type), sizeof(group) and sizeof(hive):
-	static constexpr inline skipfield_type default_min_block_capacity() noexcept
+	static constexpr skipfield_type default_min_block_capacity() noexcept
 	{
 		return static_cast<skipfield_type>((sizeof(aligned_element_type) * 8 > (sizeof(hive<element_type>) + sizeof(group)) * 2) ?
 			8 : (((sizeof(hive<element_type>) + sizeof(group)) * 2) / sizeof(aligned_element_type)));
@@ -1349,14 +1348,14 @@ private:
 
 
 	// Adaptive maximum based on numeric_limits and best outcome from multiple benchmark's (on balance) in terms of memory usage and performance:
-	static constexpr inline skipfield_type default_max_block_capacity() noexcept
+	static constexpr skipfield_type default_max_block_capacity() noexcept
 	{
 		return (std::numeric_limits<skipfield_type>::max() > 8192u) ? 8192u : std::numeric_limits<skipfield_type>::max();
 	}
 
 
 
-	static constexpr inline hive_limits default_block_capacity_limits() noexcept
+	static constexpr hive_limits default_block_capacity_limits() noexcept
 	{
 		return hive_limits(static_cast<size_t>(default_min_block_capacity()), static_cast<size_t>(default_max_block_capacity()));
 	}
@@ -3068,7 +3067,6 @@ public:
 				const skipfield_type previous_node_value = *(iterator1.skipfield_pointer - 1); // safe to do this here as we've already established that we're not at start of skipfield
 				const skipfield_type distance_to_end = static_cast<skipfield_type>(end - iterator1.element_pointer);
 
-
 				if (previous_node_value == 0) // no previous skipblock
 				{
 					*iterator1.skipfield_pointer = distance_to_end; // set start node value
@@ -3095,7 +3093,7 @@ public:
 					*(iterator1.skipfield_pointer - previous_node_value) = *(iterator1.skipfield_pointer + distance_to_end - 1) = static_cast<skipfield_type>(previous_node_value + distance_to_end);
 				}
 
-				if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() will work
+				if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active will work
 				{
 					std::memset(bitcast_pointer<void *>(iterator1.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
 				}
@@ -3243,7 +3241,6 @@ public:
 			const skipfield_type distance_to_iterator2 = static_cast<skipfield_type>(iterator2.element_pointer - current_saved.element_pointer);
 			const skipfield_type index = static_cast<skipfield_type>(current_saved.element_pointer - iterator2.group_pointer->elements);
 
-
 			if (index == 0 || *(current_saved.skipfield_pointer - 1) == 0) // element is either at start of group or previous skipfield node is 0
 			{
 				*(current_saved.skipfield_pointer) = distance_to_iterator2;
@@ -3272,11 +3269,10 @@ public:
 			}
 
 
-			if (distance_to_iterator2 > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() will work
+			if (distance_to_iterator2 > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active() will work
 			{
 				std::memset(bitcast_pointer<void *>(current_saved.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_iterator2 - 2));
 			}
-
 
 			if (iterator1.element_pointer == begin_iterator.element_pointer)
 			{
@@ -3612,7 +3608,7 @@ public:
 
 
 
-	static constexpr inline hive_limits block_capacity_hard_limits() noexcept
+	static constexpr hive_limits block_capacity_hard_limits() noexcept
 	{
 		return hive_limits(3, std::numeric_limits<skipfield_type>::max());
 	}
@@ -3918,15 +3914,21 @@ private:
 	template <bool is_const>
 	hive_iterator<is_const> get_it(const pointer element_pointer) const noexcept
 	{
-		if (total_size != 0) // Necessary here to prevent a pointer matching to an empty hive with one memory block retained with the skipfield wiped (see erase() or clear())
+		// Start with last group first, as will be the largest group in most cases so statistically-higher chance of the element being in it:
+		for (group_pointer_type current_group = end_iterator.group_pointer; current_group != NULL; current_group = current_group->previous_group)
 		{
-			// Start with last group first, as will be the largest group in most cases so statistically-higher chance of the element being in it:
-			for (group_pointer_type current_group = end_iterator.group_pointer; current_group != NULL; current_group = current_group->previous_group)
+			if (std::greater_equal()(bitcast_pointer<aligned_pointer_type>(element_pointer), current_group->elements) && std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), bitcast_pointer<aligned_pointer_type>(current_group->skipfield)))
 			{
-				if (std::greater_equal()(bitcast_pointer<aligned_pointer_type>(element_pointer), current_group->elements) && std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), bitcast_pointer<aligned_pointer_type>(current_group->skipfield)))
+				const skipfield_pointer_type skipfield_pointer = current_group->skipfield + (bitcast_pointer<aligned_pointer_type>(element_pointer) - current_group->elements);
+
+				if (*skipfield_pointer == 0 && (current_group != end_iterator.group_pointer || std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), end_iterator.element_pointer)))
 				{
-					const skipfield_pointer_type skipfield_pointer = current_group->skipfield + (bitcast_pointer<aligned_pointer_type>(element_pointer) - current_group->elements);
-					return (*skipfield_pointer == 0) ? hive_iterator<is_const>(current_group, bitcast_pointer<aligned_pointer_type>(element_pointer), skipfield_pointer) : end_iterator; // If element has been erased, return end()
+					return hive_iterator<is_const>(current_group, bitcast_pointer<aligned_pointer_type>(element_pointer), skipfield_pointer);
+				}
+				else
+				{
+					// If element has been erased or points to end(), or is in same group as end() but later than end(), return end()
+					return end_iterator;
 				}
 			}
 		}
@@ -3954,15 +3956,12 @@ public:
 
 	bool is_active(const const_iterator &it) const noexcept
 	{
-		// Schema: check (a) that the group the iterator belongs to is still active and not deallocated or in the unused_groups list, then (b) that the element is not erased. (a) prevents an out-of-bounds memory access if the group is deallocated.
-		if (total_size != 0) // Same reasoning as get_it
-		{                                                                         
-			for (group_pointer_type current_group = end_iterator.group_pointer; current_group != NULL; current_group = current_group->previous_group)
+		// Schema: check (a) that the group the iterator belongs to is still active and not deallocated or in the unused_groups list, then (b) that the element is not erased. (a) prevents an out-of-bounds memory access if the group is deallocated. Same reasoning as get_iterator for loop conditions
+		for (group_pointer_type current_group = end_iterator.group_pointer; current_group != NULL; current_group = current_group->previous_group)
+		{
+			if (it.group_pointer == current_group)
 			{
-				if (it.group_pointer == current_group)
-				{
-					return (*it.skipfield_pointer == 0);
-				}
+				return (*it.skipfield_pointer == 0 && (current_group != end_iterator.group_pointer || std::less()(std::to_address(it.skipfield_pointer), std::to_address(end_iterator.skipfield_pointer)))); // 2nd set of conditions could fail if the block is recycled via unused_groups or an allocator
 			}
 		}
 
@@ -4011,12 +4010,15 @@ public:
 
 		if (total_size != 0)
 		{
-			// If there's more unused element locations in back memory block of destination than in back memory block of source, swap with source to reduce number of skipped elements during iteration, and reduce size of free-list:
+			// If there's more unused element locations in back memory block of destination than in back memory block of source, swap with source to reduce number of skipped elements during iteration:
 			if ((bitcast_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) > (bitcast_pointer<aligned_pointer_type>(source.end_iterator.group_pointer->skipfield) - source.end_iterator.element_pointer))
 			{
 				swap(source);
-				std::swap(source.min_block_capacity, min_block_capacity); // Swap only these values back
-				std::swap(source.max_block_capacity, max_block_capacity);
+				const skipfield_type source_hive_capacities[2](source.min_block_capacity, source.max_block_capacity);
+				source.min_block_capacity = min_block_capacity;
+				source.max_block_capacity = max_block_capacity;
+				min_block_capacity = source_hive_capacities[0];
+				max_block_capacity = source_hive_capacities[1];
 			}
 
 
@@ -4049,10 +4051,16 @@ public:
 				const skipfield_type previous_node_value = *(end_iterator.skipfield_pointer - 1);
 				end_iterator.group_pointer->last_endpoint = bitcast_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield);
 
+
 				if (previous_node_value == 0) // no previous skipblock
 				{
 					*end_iterator.skipfield_pointer = distance_to_end;
 					*(end_iterator.skipfield_pointer + distance_to_end - 1) = distance_to_end;
+
+					if (distance_to_end > 2) // make erased middle nodes non-zero for get_iterator and is_active
+					{
+						std::memset(static_cast<void *>(end_iterator.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
+					}
 
 					const skipfield_type index = static_cast<skipfield_type>(end_iterator.element_pointer - end_iterator.group_pointer->elements);
 
@@ -4073,6 +4081,11 @@ public:
 				else
 				{ // update previous skipblock, no need to update free list:
 					*(end_iterator.skipfield_pointer - previous_node_value) = *(end_iterator.skipfield_pointer + distance_to_end - 1) = static_cast<skipfield_type>(previous_node_value + distance_to_end);
+
+					if (distance_to_end > 1) // make erased middle nodes non-zero for get_iterator and is_active
+					{
+						std::memset(static_cast<void *>(end_iterator.skipfield_pointer), 1, sizeof(skipfield_type) * (distance_to_end - 1));
+					}
 				}
 			}
 
@@ -4126,7 +4139,7 @@ public:
 			total_capacity -= source_unused_groups_capacity;
 			source.total_capacity = source_unused_groups_capacity;
 
-			// Establish first group from unused_groups as first active group in source, link rest as reserved groups:
+			// Establish first group from source unused_groups as first active group in source, link rest as reserved groups:
 			source.unused_groups_head = source_unused_groups->next_group;
 			source.begin_iterator.group_pointer = source_unused_groups;
 			source.begin_iterator.element_pointer = source_unused_groups->elements;

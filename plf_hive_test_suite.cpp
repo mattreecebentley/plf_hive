@@ -1770,7 +1770,7 @@ int main()
 				hive1.erase(--(hive1.end()));
 				hive2.erase(--(hive2.end()));
 
-				const unsigned int total = hive1.size() + hive2.size();
+				const unsigned int total = static_cast<unsigned int>(hive1.size() + hive2.size());
 
 				hive1.splice(hive2);
 
