@@ -60,7 +60,7 @@ namespace std
 
 
 	template <plf::hive_iterator_concept it_type>
-	inline it_type next(it_type it, const typename iterator_traits<it_type>::difference_type distance = 1)
+	it_type next(it_type it, const typename iterator_traits<it_type>::difference_type distance = 1)
 	{
 		it.advance(distance);
 		return it;
@@ -69,7 +69,7 @@ namespace std
 
 
 	template <plf::hive_iterator_concept it_type>
-	inline it_type prev(it_type it, const typename iterator_traits<it_type>::difference_type distance = 1)
+	it_type prev(it_type it, const typename iterator_traits<it_type>::difference_type distance = 1)
 	{
 		it.advance(-distance);
 		return it;
@@ -78,7 +78,7 @@ namespace std
 
 
 	template <plf::hive_iterator_concept it_type>
-	inline typename iterator_traits<it_type>::difference_type distance(const it_type first, const it_type last)
+	typename iterator_traits<it_type>::difference_type distance(const it_type first, const it_type last)
 	{
 		return first.distance(last);
 	}
@@ -140,7 +140,7 @@ private:
 
 	// Calculate the capacity of a groups' elements+skipfield memory block when expressed in multiples of the value_type's alignment.
 	// We also check to see if alignment is larger than sizeof value_type and use alignment size if so:
-	static inline size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
+	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
 		return ((elements_per_group * (((sizeof(aligned_element_type) >= alignof(aligned_element_type)) ?
 			sizeof(aligned_element_type) : alignof(aligned_element_type)) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1)
@@ -264,8 +264,35 @@ public:
 		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
 
 
+		hive_iterator() noexcept: group_pointer(NULL), element_pointer(NULL), skipfield_pointer(NULL)	{}
 
-		inline hive_iterator & operator = (const hive_iterator &source) noexcept
+
+
+		hive_iterator (const hive_iterator &source) noexcept: // Note: Surprisingly, use of = default here and in other simple constructors results in slowdowns of ~10% in many benchmarks under GCC11
+			group_pointer(source.group_pointer),
+			element_pointer(source.element_pointer),
+			skipfield_pointer(source.skipfield_pointer)
+		{}
+
+
+		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
+		hive_iterator(const hive_iterator<false> &source) noexcept:
+			group_pointer(source.group_pointer),
+			element_pointer(source.element_pointer),
+			skipfield_pointer(source.skipfield_pointer)
+		{}
+
+
+		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
+		hive_iterator(hive_iterator<false> &&source) noexcept:
+			group_pointer(std::move(source.group_pointer)),
+			element_pointer(std::move(source.element_pointer)),
+			skipfield_pointer(std::move(source.skipfield_pointer))
+		{}
+
+
+
+		hive_iterator & operator = (const hive_iterator &source) noexcept
 		{
 			group_pointer = source.group_pointer;
 			element_pointer = source.element_pointer;
@@ -275,7 +302,8 @@ public:
 
 
 
-		inline hive_iterator & operator = (const hive_iterator<!is_const> &source) noexcept
+		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
+		hive_iterator & operator = (const hive_iterator<false> &source) noexcept
 		{
 			group_pointer = source.group_pointer;
 			element_pointer = source.element_pointer;
@@ -285,8 +313,7 @@ public:
 
 
 
-		// Move assignment - only really necessary if the allocator uses non-standard ie. "smart" pointers
-		inline hive_iterator & operator = (hive_iterator &&source) noexcept
+		hive_iterator & operator = (hive_iterator &&source) noexcept
 		{
 			assert(&source != this);
 			group_pointer = std::move(source.group_pointer);
@@ -297,7 +324,8 @@ public:
 
 
 
-		inline hive_iterator & operator = (hive_iterator<!is_const> &&source) noexcept
+		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
+		hive_iterator & operator = (const hive_iterator<false> &&source) noexcept
 		{
 			group_pointer = std::move(source.group_pointer);
 			element_pointer = std::move(source.element_pointer);
@@ -307,42 +335,42 @@ public:
 
 
 
-		inline bool operator == (const hive_iterator &rh) const noexcept
+		bool operator == (const hive_iterator &rh) const noexcept
 		{
 			return (element_pointer == rh.element_pointer);
 		}
 
 
 
-		inline bool operator == (const hive_iterator<!is_const> &rh) const noexcept
+		bool operator == (const hive_iterator<!is_const> &rh) const noexcept
 		{
 			return (element_pointer == rh.element_pointer);
 		}
 
 
 
-		inline bool operator != (const hive_iterator &rh) const noexcept
+		bool operator != (const hive_iterator &rh) const noexcept
 		{
 			return (element_pointer != rh.element_pointer);
 		}
 
 
 
-		inline bool operator != (const hive_iterator<!is_const> &rh) const noexcept
+		bool operator != (const hive_iterator<!is_const> &rh) const noexcept
 		{
 			return (element_pointer != rh.element_pointer);
 		}
 
 
 
-		inline reference operator * () const // may cause exception with uninitialized iterator
+		reference operator * () const // may cause exception with uninitialized iterator
 		{
 			return *(bitcast_pointer<pointer>(element_pointer));
 		}
 
 
 
-		inline pointer operator -> () const noexcept
+		pointer operator -> () const noexcept
 		{
 			return bitcast_pointer<pointer>(element_pointer);
 		}
@@ -370,7 +398,7 @@ public:
 
 
 
-		inline hive_iterator operator ++(int)
+		hive_iterator operator ++(int)
 		{
 			const hive_iterator copy(*this);
 			++*this;
@@ -404,7 +432,7 @@ public:
 
 
 
-		inline hive_iterator operator -- (int)
+		hive_iterator operator -- (int)
 		{
 			const hive_iterator copy(*this);
 			--*this;
@@ -415,7 +443,7 @@ public:
 
 		// Less-than etc operators retained as GCC11 codegen synthesis from <=> is slower and bulkier for same operations:
 		template <bool is_const_it>
-		inline bool operator > (const hive_iterator<is_const_it> &rh) const noexcept
+		bool operator > (const hive_iterator<is_const_it> &rh) const noexcept
 		{
 			return ((group_pointer == rh.group_pointer) & std::greater()(std::to_address(element_pointer), std::to_address(rh.element_pointer))) ||
 				(group_pointer != rh.group_pointer && group_pointer->group_number > rh.group_pointer->group_number);
@@ -424,7 +452,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator < (const hive_iterator<is_const_it> &rh) const noexcept
+		bool operator < (const hive_iterator<is_const_it> &rh) const noexcept
 		{
 			return rh > *this;
 		}
@@ -432,7 +460,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator >= (const hive_iterator<is_const_it> &rh) const noexcept
+		bool operator >= (const hive_iterator<is_const_it> &rh) const noexcept
 		{
 			return !(rh > *this);
 		}
@@ -440,7 +468,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator <= (const hive_iterator<is_const_it> &rh) const noexcept
+		bool operator <= (const hive_iterator<is_const_it> &rh) const noexcept
 		{
 			return !(*this > rh);
 		}
@@ -448,20 +476,20 @@ public:
 
 
 		template <bool is_const_it>
-		inline std::strong_ordering operator <=> (const hive_iterator<is_const_it> &rh) const noexcept
+		std::strong_ordering operator <=> (const hive_iterator<is_const_it> &rh) const noexcept
 		{
 			return (element_pointer == rh.element_pointer) ? std::strong_ordering::equal : ((*this > rh) ? std::strong_ordering::greater : std::strong_ordering::less);
 		}
 
 
 
-		hive_iterator() noexcept: group_pointer(NULL), element_pointer(NULL), skipfield_pointer(NULL)	{}
-
-
-
 	private:
 		// Used by cend(), erase() etc:
-		hive_iterator(const group_pointer_type group_p, const aligned_pointer_type element_p, const skipfield_pointer_type skipfield_p) noexcept: group_pointer(group_p), element_pointer(element_p), skipfield_pointer(skipfield_p) {}
+		hive_iterator(const group_pointer_type group_p, const aligned_pointer_type element_p, const skipfield_pointer_type skipfield_p) noexcept:
+			group_pointer(group_p),
+			element_pointer(element_p),
+			skipfield_pointer(skipfield_p)
+		{}
 
 
 
@@ -796,33 +824,6 @@ public:
 
 			return distance;
 		}
-
-
-
-	public:
-
-		inline hive_iterator (const hive_iterator &source) noexcept:
-			group_pointer(source.group_pointer),
-			element_pointer(source.element_pointer),
-			skipfield_pointer(source.skipfield_pointer)
-		{}
-
-
-		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
-		inline hive_iterator(const hive_iterator<false> &source) noexcept:
-			group_pointer(source.group_pointer),
-			element_pointer(source.element_pointer),
-			skipfield_pointer(source.skipfield_pointer)
-		{}
-
-
-		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
-		inline hive_iterator(hive_iterator<false> &&source) noexcept:
-			group_pointer(std::move(source.group_pointer)),
-			element_pointer(std::move(source.element_pointer)),
-			skipfield_pointer(std::move(source.skipfield_pointer))
-		{}
-
 	}; // hive_iterator
 
 
@@ -860,33 +861,58 @@ public:
 
 
 
-		inline hive_reverse_iterator& operator = (const hive_reverse_iterator &source) noexcept
-		{
-			it = source.it;
-			return *this;
-		}
+		hive_reverse_iterator () noexcept
+		{}
 
 
-
-		inline hive_reverse_iterator& operator = (const hive_reverse_iterator<!is_const_r> &source) noexcept
-		{
-			it = source.it;
-			return *this;
-		}
+		hive_reverse_iterator (const hive_reverse_iterator &source) noexcept:
+			it(source.it)
+		{}
 
 
+		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
+		hive_reverse_iterator (const hive_reverse_iterator<false> &source) noexcept:
+			it(source.it)
+		{}
 
-		template <bool is_const_it>
-		inline hive_reverse_iterator& operator = (const hive_iterator<is_const_it> &source) noexcept
+
+		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept:
+			it(std::move(source.it))
+		{}
+
+
+		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
+		hive_reverse_iterator (hive_reverse_iterator<false> &&source) noexcept:
+			it(std::move(source.it))
+		{}
+
+
+		template <bool is_const_rit>
+		hive_reverse_iterator& operator = (const hive_iterator<is_const_rit> &source) noexcept
 		{
 			it = source;
 			return *this;
 		}
 
 
+		hive_reverse_iterator& operator = (const hive_reverse_iterator &source) noexcept
+		{
+			it = source.it;
+			return *this;
+		}
 
-		// move assignment
-		inline hive_reverse_iterator& operator = (hive_reverse_iterator &&source) noexcept
+
+
+		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
+		hive_reverse_iterator& operator = (const hive_reverse_iterator<false> &source) noexcept
+		{
+			it = source.it;
+			return *this;
+		}
+
+
+
+		hive_reverse_iterator& operator = (hive_reverse_iterator &&source) noexcept
 		{
 			assert(&source != this);
 			it = std::move(source.it);
@@ -894,7 +920,9 @@ public:
 		}
 
 
-		inline hive_reverse_iterator& operator = (hive_reverse_iterator<!is_const_r> &&source) noexcept
+
+		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
+		hive_reverse_iterator& operator = (hive_reverse_iterator<false> &&source) noexcept
 		{
 			it = std::move(source.it);
 			return *this;
@@ -902,42 +930,42 @@ public:
 
 
 
-		inline bool operator == (const hive_reverse_iterator &rh) const noexcept
+		bool operator == (const hive_reverse_iterator &rh) const noexcept
 		{
 			return (it == rh.it);
 		}
 
 
 
-		inline bool operator == (const hive_reverse_iterator<!is_const_r> &rh) const noexcept
+		bool operator == (const hive_reverse_iterator<!is_const_r> &rh) const noexcept
 		{
 			return (it == rh.it);
 		}
 
 
 
-		inline bool operator != (const hive_reverse_iterator &rh) const noexcept
+		bool operator != (const hive_reverse_iterator &rh) const noexcept
 		{
 			return (it != rh.it);
 		}
 
 
 
-		inline bool operator != (const hive_reverse_iterator<!is_const_r> &rh) const noexcept
+		bool operator != (const hive_reverse_iterator<!is_const_r> &rh) const noexcept
 		{
 			return (it != rh.it);
 		}
 
 
 
-		inline reference operator * () const noexcept
+		reference operator * () const noexcept
 		{
 			return *(bitcast_pointer<pointer>(it.element_pointer));
 		}
 
 
 
-		inline pointer operator -> () const noexcept
+		pointer operator -> () const noexcept
 		{
 			return bitcast_pointer<pointer>(it.element_pointer);
 		}
@@ -982,7 +1010,7 @@ public:
 
 
 
-		inline hive_reverse_iterator operator ++ (int)
+		hive_reverse_iterator operator ++ (int)
 		{
 			const hive_reverse_iterator copy(*this);
 			++*this;
@@ -991,7 +1019,7 @@ public:
 
 
 
-		inline hive_reverse_iterator & operator -- ()
+		hive_reverse_iterator & operator -- ()
 		{
 			++it;
 			return *this;
@@ -999,7 +1027,7 @@ public:
 
 
 
-		inline hive_reverse_iterator operator -- (int)
+		hive_reverse_iterator operator -- (int)
 		{
 			const hive_reverse_iterator copy(*this);
 			--*this;
@@ -1008,7 +1036,7 @@ public:
 
 
 
-		inline typename hive::hive_iterator<is_const_r> base() const noexcept
+		typename hive::hive_iterator<is_const_r> base() const noexcept
 		{
 			return (it.group_pointer != NULL) ? ++(typename hive::hive_iterator<is_const_r>(it)) : typename hive::hive_iterator<is_const_r>(NULL, NULL, NULL);
 		}
@@ -1016,7 +1044,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator > (const hive_reverse_iterator<is_const_it> &rh) const noexcept
+		bool operator > (const hive_reverse_iterator<is_const_it> &rh) const noexcept
 		{
 			return (rh.it > it);
 		}
@@ -1024,7 +1052,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator < (const hive_reverse_iterator<is_const_it> &rh) const noexcept
+		bool operator < (const hive_reverse_iterator<is_const_it> &rh) const noexcept
 		{
 			return (it > rh.it);
 		}
@@ -1032,7 +1060,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator >= (const hive_reverse_iterator<is_const_it> &rh) const noexcept
+		bool operator >= (const hive_reverse_iterator<is_const_it> &rh) const noexcept
 		{
 			return !(it > rh.it);
 		}
@@ -1040,7 +1068,7 @@ public:
 
 
 		template <bool is_const_it>
-		inline bool operator <= (const hive_reverse_iterator<is_const_it> &rh) const noexcept
+		bool operator <= (const hive_reverse_iterator<is_const_it> &rh) const noexcept
 		{
 			return !(rh.it > it);
 		}
@@ -1048,40 +1076,11 @@ public:
 
 
 		template <bool is_const_it>
-		inline std::strong_ordering operator <=> (const hive_reverse_iterator<is_const_it> &rh) const noexcept
+		std::strong_ordering operator <=> (const hive_reverse_iterator<is_const_it> &rh) const noexcept
 		{
 			return (rh.it <=> it);
 		}
 
-
-
-		inline hive_reverse_iterator () noexcept
-		{}
-
-
-
-		inline hive_reverse_iterator (const hive_reverse_iterator &source) noexcept:
-			it(source.it)
-		{}
-
-
-		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
-		inline hive_reverse_iterator (const hive_reverse_iterator<false> &source) noexcept:
-			it(source.it)
-		{}
-
-
-
-		// move constructors:
-		inline hive_reverse_iterator (hive_reverse_iterator &&source) noexcept:
-			it(std::move(source.it))
-		{}
-
-
-		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
-		inline hive_reverse_iterator (hive_reverse_iterator<false> &&source) noexcept:
-			it(std::move(source.it))
-		{}
 
 
 	private:
@@ -1092,7 +1091,7 @@ public:
 
 		// distance implementation:
 
- 		inline difference_type distance(const hive_reverse_iterator &last) const
+ 		difference_type distance(const hive_reverse_iterator &last) const
  		{
  			return last.it.distance(it);
  		}
@@ -1362,7 +1361,7 @@ private:
 
 
 
-	inline void check_capacities_conformance(const hive_limits capacities) const
+	void check_capacities_conformance(const hive_limits capacities) const
 	{
 		constexpr hive_limits hard_capacities = block_capacity_hard_limits();
 
@@ -1468,7 +1467,7 @@ public:
 
 private:
 
-	inline void blank() noexcept
+	void blank() noexcept
 	{
 		if constexpr (std::is_standard_layout<hive>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
 		{ // if all pointer types are trivial, we can just nuke all the member variables from orbit with memset (NULL is always 0 in C++):
@@ -1617,84 +1616,84 @@ public:
 
 
 
-	inline iterator begin() noexcept
+	iterator begin() noexcept
 	{
 		return begin_iterator;
 	}
 
 
 
-	inline const_iterator begin() const noexcept
+	const_iterator begin() const noexcept
 	{
 		return begin_iterator;
 	}
 
 
 
-	inline iterator end() noexcept
+	iterator end() noexcept
 	{
 		return end_iterator;
 	}
 
 
 
-	inline const_iterator end() const noexcept
+	const_iterator end() const noexcept
 	{
 		return end_iterator;
 	}
 
 
 
-	inline const_iterator cbegin() const noexcept
+	const_iterator cbegin() const noexcept
 	{
 		return begin_iterator;
 	}
 
 
 
-	inline const_iterator cend() const noexcept
+	const_iterator cend() const noexcept
 	{
 		return end_iterator;
 	}
 
 
 
-	inline reverse_iterator rbegin() noexcept
+	reverse_iterator rbegin() noexcept
 	{
 		return (end_iterator.group_pointer != NULL) ? ++reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
 
 
 
-	inline const_reverse_iterator rbegin() const noexcept
+	const_reverse_iterator rbegin() const noexcept
 	{
 		return (end_iterator.group_pointer != NULL) ? ++const_reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
 
 
 
-	inline reverse_iterator rend() noexcept
+	reverse_iterator rend() noexcept
 	{
 		return reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
 
 
 
-	inline const_reverse_iterator rend() const noexcept
+	const_reverse_iterator rend() const noexcept
 	{
 		return const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
 
 
 
-	inline const_reverse_iterator crbegin() const noexcept
+	const_reverse_iterator crbegin() const noexcept
 	{
 		return (end_iterator.group_pointer != NULL) ? ++const_reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
 
 
 
-	inline const_reverse_iterator crend() const noexcept
+	const_reverse_iterator crend() const noexcept
 	{
 		return const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
 	}
@@ -1847,7 +1846,7 @@ private:
 
 
 
-	inline void reset()
+	void reset()
 	{
 		destroy_all_data();
 		blank();
@@ -2684,7 +2683,7 @@ public:
 	// Range insert:
 
 	template <class iterator_type>
-	inline void insert (const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> first, const iterator_type last)
+	void insert (const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> first, const iterator_type last)
 	{
 		range_insert(first, static_cast<size_type>(std::distance(first, last)));
 	}
@@ -2695,7 +2694,7 @@ public:
 	// Range insert, move_iterator overload:
 
 	template <class iterator_type>
-	inline void insert (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
+	void insert (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
 	{
 		range_insert(first, static_cast<size_type>(std::distance(first.base(),last.base())));
 	}
@@ -2704,7 +2703,7 @@ public:
 
 	// Initializer-list insert
 
-	inline void insert (const std::initializer_list<element_type> &element_list)
+	void insert (const std::initializer_list<element_type> &element_list)
 	{
 		range_insert(element_list.begin(), static_cast<size_type>(element_list.size()));
 	}
@@ -2713,7 +2712,7 @@ public:
 
 	template<class range_type>
 		requires std::ranges::range<range_type>
-	inline void insert_range(range_type &&the_range)
+	void insert_range(range_type &&the_range)
 	{
 		range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
 	}
@@ -2722,7 +2721,7 @@ public:
 
 private:
 
-	inline void update_subsequent_group_numbers(group_pointer_type current_group) noexcept
+	void update_subsequent_group_numbers(group_pointer_type current_group) noexcept
 	{
 		do
 		{
@@ -2754,7 +2753,7 @@ private:
 
 
 
-	inline void reset_only_group_left(group_pointer_type const group_pointer) noexcept
+	void reset_only_group_left(group_pointer_type const group_pointer) noexcept
 	{
 		groups_with_erasures_list_head = NULL;
 		group_pointer->reset(0, NULL, NULL, 0);
@@ -2766,7 +2765,7 @@ private:
 
 
 
-	inline void add_group_to_unused_groups_list(group * const group_pointer) noexcept
+	void add_group_to_unused_groups_list(group * const group_pointer) noexcept
 	{
 		group_pointer->next_group = unused_groups_head;
 		unused_groups_head = group_pointer;
@@ -3155,7 +3154,7 @@ public:
 			}
 			else
 			{
-				begin_iterator = iterator2; // This line is included here primarily to avoid a secondary if statement within the if block below - it will not be needed in any other situation
+				begin_iterator = iterator(iterator2.group_pointer, iterator2.element_pointer, iterator2.skipfield_pointer);; // This line is included here primarily to avoid a secondary if statement within the if block below - it will not be needed in any other situation
 			}
 		}
 
@@ -3276,7 +3275,7 @@ public:
 
 			if (iterator1.element_pointer == begin_iterator.element_pointer)
 			{
-				begin_iterator = iterator2;
+				begin_iterator = iterator(iterator2.group_pointer, iterator2.element_pointer, iterator2.skipfield_pointer);;
 			}
 
 			iterator2.group_pointer->size = static_cast<skipfield_type>(iterator2.group_pointer->size - number_of_group_erasures);
@@ -3420,7 +3419,7 @@ public:
 
 	// Fill assign:
 
-	inline void assign(const size_type size, const element_type &element)
+	void assign(const size_type size, const element_type &element)
 	{
 		if (size == 0)
 		{
@@ -3439,7 +3438,7 @@ private:
 	// Range assign core:
 
 	template <class iterator_type>
-	inline void range_assign(const iterator_type it, const size_type size)
+	void range_assign(const iterator_type it, const size_type size)
 	{
 		if (size == 0)
 		{
@@ -3459,7 +3458,7 @@ public:
 	// Range assign:
 
 	template <class iterator_type>
-	inline void assign(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> first, const iterator_type last)
+	void assign(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> first, const iterator_type last)
 	{
 		range_assign(first, static_cast<size_type>(std::distance(first, last)));
 	}
@@ -3469,7 +3468,7 @@ public:
 	// Range assign, move_iterator overload:
 
 	template <class iterator_type>
-	inline void assign (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
+	void assign (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
 	{
 		range_assign(first, static_cast<size_type>(std::distance(first.base(),last.base())));
 	}
@@ -3478,7 +3477,7 @@ public:
 
 	// Initializer-list assign:
 
-	inline void assign(const std::initializer_list<element_type> &element_list)
+	void assign(const std::initializer_list<element_type> &element_list)
 	{
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
 	}
@@ -3487,35 +3486,35 @@ public:
 
 	template<class range_type>
 		requires std::ranges::range<range_type>
-	inline void assign_range(range_type &&the_range)
+	void assign_range(range_type &&the_range)
 	{
 		range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
 	}
 
 
 
-	[[nodiscard]] inline bool empty() const noexcept
+	[[nodiscard]] bool empty() const noexcept
 	{
 		return total_size == 0;
 	}
 
 
 
-	inline size_type size() const noexcept
+	size_type size() const noexcept
 	{
 		return total_size;
 	}
 
 
 
-	inline size_type max_size() const noexcept
+	size_type max_size() const noexcept
 	{
 		return std::allocator_traits<allocator_type>::max_size(*this);
 	}
 
 
 
-	inline size_type capacity() const noexcept
+	size_type capacity() const noexcept
 	{
 		return total_capacity;
 	}
@@ -3601,7 +3600,7 @@ public:
 
 
 
-	inline hive_limits block_capacity_limits() const noexcept
+	hive_limits block_capacity_limits() const noexcept
 	{
 		return hive_limits(static_cast<size_t>(min_block_capacity), static_cast<size_t>(max_block_capacity));
 	}
@@ -3709,7 +3708,7 @@ public:
 
 
 
-	inline hive & operator = (const std::initializer_list<element_type> &element_list)
+	hive & operator = (const std::initializer_list<element_type> &element_list)
 	{
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
 		return *this;
@@ -3917,19 +3916,10 @@ private:
 		// Start with last group first, as will be the largest group in most cases so statistically-higher chance of the element being in it:
 		for (group_pointer_type current_group = end_iterator.group_pointer; current_group != NULL; current_group = current_group->previous_group)
 		{
-			if (std::greater_equal()(bitcast_pointer<aligned_pointer_type>(element_pointer), current_group->elements) && std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), bitcast_pointer<aligned_pointer_type>(current_group->skipfield)))
+			if (std::greater_equal()(bitcast_pointer<aligned_pointer_type>(element_pointer), current_group->elements) && std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), current_group->last_endpoint))
 			{
 				const skipfield_pointer_type skipfield_pointer = current_group->skipfield + (bitcast_pointer<aligned_pointer_type>(element_pointer) - current_group->elements);
-
-				if (*skipfield_pointer == 0 && (current_group != end_iterator.group_pointer || std::less()(bitcast_pointer<aligned_pointer_type>(element_pointer), end_iterator.element_pointer)))
-				{
-					return hive_iterator<is_const>(current_group, bitcast_pointer<aligned_pointer_type>(element_pointer), skipfield_pointer);
-				}
-				else
-				{
-					// If element has been erased or points to end(), or is in same group as end() but later than end(), return end()
-					return end_iterator;
-				}
+				return (*skipfield_pointer == 0) ? hive_iterator<is_const>(current_group, bitcast_pointer<aligned_pointer_type>(element_pointer), skipfield_pointer) : end_iterator;
 			}
 		}
 
@@ -3940,14 +3930,14 @@ private:
 
 public:
 
-	inline iterator get_iterator(const pointer element_pointer) noexcept
+	iterator get_iterator(const pointer element_pointer) noexcept
 	{
 		return get_it<false>(element_pointer);
 	}
 
 
 
-	inline const_iterator get_iterator(const const_pointer element_pointer) const noexcept
+	const_iterator get_iterator(const const_pointer element_pointer) const noexcept
 	{
 		return get_it<true>(const_cast<pointer>(element_pointer));
 	}
@@ -3961,7 +3951,7 @@ public:
 		{
 			if (it.group_pointer == current_group)
 			{
-				return (*it.skipfield_pointer == 0 && (current_group != end_iterator.group_pointer || std::less()(std::to_address(it.skipfield_pointer), std::to_address(end_iterator.skipfield_pointer)))); // 2nd set of conditions could fail if the block is recycled via unused_groups or an allocator
+				return (*it.skipfield_pointer == 0 && std::less()(std::to_address(it.element_pointer), std::to_address(current_group->last_endpoint))); // 2nd condition could fail if the memory block is reused via unused_groups or an allocator
 			}
 		}
 
@@ -3970,7 +3960,7 @@ public:
 
 
 
-	inline allocator_type get_allocator() const noexcept
+	allocator_type get_allocator() const noexcept
 	{
 		return *this;
 	}
@@ -4151,7 +4141,7 @@ public:
 
 
 
-	inline void splice(hive &source)
+	void splice(hive &source)
 	{
 		splice(std::move(source));
 	}
@@ -4244,7 +4234,7 @@ public:
 
 
 
-	inline void sort()
+	void sort()
 	{
 		sort(std::less<element_type>());
 	}
@@ -4297,7 +4287,7 @@ public:
 
 
 
-	inline size_type unique()
+	size_type unique()
 	{
 		return unique(std::equal_to<element_type>());
 	}
@@ -4369,7 +4359,7 @@ struct hive_eq_to
 		value(store_value)
 	{}
 
-	inline bool operator() (const element_type compare_value) const noexcept
+	bool operator() (const element_type compare_value) const noexcept
 	{
 		return value == compare_value;
 	}
@@ -4386,7 +4376,7 @@ namespace std
 {
 
 	template <class element_type, class allocator_type>
-	inline void swap (plf::hive<element_type, allocator_type> &a, plf::hive<element_type, allocator_type> &b) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_swap::value || std::allocator_traits<allocator_type>::is_always_equal::value)
+	void swap (plf::hive<element_type, allocator_type> &a, plf::hive<element_type, allocator_type> &b) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_swap::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
 		a.swap(b);
 	}
@@ -4438,7 +4428,7 @@ namespace std
 
 
 	template <class element_type, class allocator_type>
-	inline typename plf::hive<element_type, allocator_type>::size_type erase(plf::hive<element_type, allocator_type> &container, const element_type &value)
+	typename plf::hive<element_type, allocator_type>::size_type erase(plf::hive<element_type, allocator_type> &container, const element_type &value)
 	{
 		return erase_if(container, plf::hive_eq_to<element_type>(value));
 	}
