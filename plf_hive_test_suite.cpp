@@ -232,7 +232,7 @@ int main()
 
 			hive<int *>::reverse_iterator r_iterator3 = std::reverse_iterator(p_hive.begin());
 
-			failpass("std::reverse_iterator test", std::distance(p_hive.rbegin(), r_iterator3) == 1);
+			failpass("std::reverse_iterator and negative distance test", std::distance(p_hive.rend(), r_iterator3) == -1);
 
 
 			numtotal = 0;
