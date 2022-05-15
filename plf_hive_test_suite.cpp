@@ -209,6 +209,7 @@ int main()
 			numtotal = 0;
 			total = 0;
 
+
 			for (hive<int *>::reverse_iterator the_iterator = p_hive.rbegin(); the_iterator != p_hive.rend(); ++the_iterator)
 			{
 				++total;
@@ -227,6 +228,12 @@ int main()
 			hive<int *>::reverse_iterator r_iterator2 = std::next(r_iterator, 2);
 
 			failpass("Reverse iterator next and distance test", std::distance(p_hive.rbegin(), r_iterator2) == 52);
+
+
+			hive<int *>::reverse_iterator r_iterator3 = std::reverse_iterator(p_hive.begin());
+
+			failpass("std::reverse_iterator test", std::distance(p_hive.rbegin(), r_iterator3) == 1);
+
 
 			numtotal = 0;
 			total = 0;
