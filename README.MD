@@ -12,4 +12,5 @@ Otherwise hive should follow the same rules as colony and be used in the same wa
 https://plflib.org/colony.htm
 
 Note: In terms of the Microsoft compiler, hive requires Visual Studio 2022 or later to compile properly (early versions have an unresolved bug).
-Note2: Current bug in Microsoft compiler prevents compilation even for VS 2022.
+
+Update Note: A current bug in the Microsoft compiler prevents compilation even for VS 2022. Will remove this notice once it is fixed.
