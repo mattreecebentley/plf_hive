@@ -269,11 +269,13 @@ public:
 		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
 
 
+
 		hive_iterator() noexcept:
 			group_pointer(nullptr),
 			element_pointer(nullptr),
 			skipfield_pointer(nullptr)
 		{}
+
 
 
 		hive_iterator (const hive_iterator &source) noexcept: // Note: Surprisingly, use of = default here and in other simple constructors results in slowdowns of ~10% in many benchmarks under GCC
@@ -283,12 +285,14 @@ public:
 		{}
 
 
+
 		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
 		hive_iterator(const hive_iterator<false> &source) noexcept:
 			group_pointer(source.group_pointer),
 			element_pointer(source.element_pointer),
 			skipfield_pointer(source.skipfield_pointer)
 		{}
+
 
 
 		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
@@ -1405,7 +1409,7 @@ public:
 
 	// Default constructor:
 
-	hive():
+	constexpr hive() noexcept(noexcept(allocator_type())) :
 		allocator_type(allocator_type()),
 		groups_with_erasures_list_head(nullptr),
 		unused_groups_head(nullptr),
@@ -1417,7 +1421,7 @@ public:
 
 
 
-	explicit hive(const hive_limits capacities):
+	explicit hive(const hive_limits capacities) noexcept(noexcept(allocator_type())):
 		allocator_type(allocator_type()),
 		groups_with_erasures_list_head(nullptr),
 		unused_groups_head(nullptr),
@@ -1433,7 +1437,7 @@ public:
 
 	// Default constructor (allocator-extended):
 
-	explicit hive(const allocator_type &alloc):
+	explicit hive(const allocator_type &alloc) noexcept:
 		allocator_type(alloc),
 		groups_with_erasures_list_head(nullptr),
 		unused_groups_head(nullptr),
@@ -3563,7 +3567,7 @@ private:
 	// get all elements contiguous in memory and shrink to fit, remove erasures and erasure free lists. Invalidates all iterators and pointers to elements.
 	void consolidate()
 	{
-		if constexpr (std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value)
+		if constexpr (std::is_nothrow_move_constructible<element_type>::value && std::is_nothrow_move_assignable<element_type>::value)
 		{
 			hive temp(hive_limits(min_block_capacity, max_block_capacity));
 			temp.range_assign(std::make_move_iterator(begin_iterator), total_size);
@@ -4135,16 +4139,20 @@ public:
 
 
 			// Join the destination and source group chains:
-			size_type source_group_count = 0;
-
-			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group, ++source_group_count) {}
-
-			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < source_group_count)
+			if (source.begin_iterator.group_pointer->group_number < end_iterator.group_pointer->group_number)
 			{
-				reset_group_numbers();
+				size_type source_group_count = 0;
+
+				for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group, ++source_group_count) {}
+
+				if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < source_group_count)
+				{
+					reset_group_numbers();
+				}
+
+				update_subsequent_group_numbers(get_new_group_number(), source.begin_iterator.group_pointer);
 			}
 
-			update_subsequent_group_numbers(get_new_group_number(), source.begin_iterator.group_pointer);
 			end_iterator.group_pointer->next_group = source.begin_iterator.group_pointer;
 			source.begin_iterator.group_pointer->previous_group = end_iterator.group_pointer;
 			end_iterator = source.end_iterator;
