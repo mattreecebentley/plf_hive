@@ -247,14 +247,13 @@ public:
 		typedef std::bidirectional_iterator_tag	iterator_concept;
 		typedef typename hive::value_type 			value_type;
 		typedef typename hive::difference_type		difference_type;
+		typedef hive_reverse_iterator<is_const> 	reverse_type;
 		typedef typename std::conditional_t<is_const, typename hive::const_pointer, typename hive::pointer>		pointer;
 		typedef typename std::conditional_t<is_const, typename hive::const_reference, typename hive::reference>	reference;
-		typedef typename std::conditional_t<is_const, std::true_type, std::false_type> constness; // These two used by std::reverse_iterator overload for iterator
-		typedef hive parent;
 
 		friend class hive;
-		friend class hive_reverse_iterator<false>;
-		friend class hive_reverse_iterator<true>;
+		friend reverse_iterator;
+		friend const_reverse_iterator;
 
 		template <hive_iterator_concept it_type, typename distance_type>
 		friend void std::advance(it_type &it, const distance_type distance);
@@ -858,7 +857,6 @@ public:
 		iterator current;
 
 	public:
-
 		struct hive_iterator_tag {};
 		typedef std::bidirectional_iterator_tag 	iterator_category;
 		typedef std::bidirectional_iterator_tag 	iterator_concept;
@@ -1417,100 +1415,6 @@ private:
 
 
 
-public:
-
-	// Default constructor:
-
-	constexpr hive() noexcept(noexcept(allocator_type())) :
-		allocator_type(allocator_type()),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(default_min_block_capacity()),
-		max_block_capacity(default_max_block_capacity())
-	{}
-
-
-
-	explicit hive(const hive_limits capacities) noexcept(noexcept(allocator_type())):
-		allocator_type(allocator_type()),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(static_cast<skipfield_type>(capacities.min)),
-		max_block_capacity(static_cast<skipfield_type>(capacities.max))
-	{
-		check_capacities_conformance(capacities);
-	}
-
-
-
-	// Default constructor (allocator-extended):
-
-	explicit hive(const allocator_type &alloc) noexcept:
-		allocator_type(alloc),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(default_min_block_capacity()),
-		max_block_capacity(default_max_block_capacity())
-	{}
-
-
-
-	hive(const hive_limits capacities, const allocator_type &alloc):
-		allocator_type(alloc),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(static_cast<skipfield_type>(capacities.min)),
-		max_block_capacity(static_cast<skipfield_type>(capacities.max))
-	{
-		check_capacities_conformance(capacities);
-	}
-
-
-
-	// Copy constructor:
-
-	hive(const hive &source):
-		allocator_type(std::allocator_traits<allocator_type>::select_on_container_copy_construction(source)),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(static_cast<skipfield_type>((source.min_block_capacity > source.total_size) ? source.min_block_capacity : ((source.total_size > source.max_block_capacity) ? source.max_block_capacity : source.total_size))), // min group size is set to value closest to total number of elements in source hive, in order to not create unnecessary small groups in the range-insert below, then reverts to the original min group size afterwards. This effectively saves a call to reserve.
-		max_block_capacity(source.max_block_capacity)
-	{ // can skip checking for skipfield conformance here as source will have already checked theirs. Same applies for other copy and move constructors below
-		range_assign(source.begin_iterator, source.total_size);
-		min_block_capacity = source.min_block_capacity; // reset to correct value for future operations
-	}
-
-
-
-	// Copy constructor (allocator-extended):
-
-	hive(const hive &source, const std::type_identity_t<allocator_type> &alloc):
-		allocator_type(alloc),
-		groups_with_erasures_list_head(nullptr),
-		unused_groups_head(nullptr),
-		total_size(0),
-		total_capacity(0),
-		min_block_capacity(static_cast<skipfield_type>((source.min_block_capacity > source.total_size) ? source.min_block_capacity : ((source.total_size > source.max_block_capacity) ? source.max_block_capacity : source.total_size))),
-		max_block_capacity(source.max_block_capacity)
-	{
-		range_assign(source.begin_iterator, source.total_size);
-		min_block_capacity = source.min_block_capacity;
-	}
-
-
-
-private:
-
 	void blank() noexcept
 	{
 		if constexpr (std::is_standard_layout<hive>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
@@ -1536,26 +1440,71 @@ private:
 
 public:
 
-	// Move constructor:
+	// Default constructors:
 
-	hive(hive &&source) noexcept:
-		allocator_type(std::move(source)),
-		end_iterator(std::move(source.end_iterator)),
-		begin_iterator(std::move(source.begin_iterator)),
-		groups_with_erasures_list_head(std::move(source.groups_with_erasures_list_head)),
-		unused_groups_head(std::move(source.unused_groups_head)),
-		total_size(source.total_size),
-		total_capacity(source.total_capacity),
-		min_block_capacity(source.min_block_capacity),
-		max_block_capacity(source.max_block_capacity)
+
+	explicit hive(const allocator_type &alloc) noexcept:
+		allocator_type(alloc),
+		groups_with_erasures_list_head(nullptr),
+		unused_groups_head(nullptr),
+		total_size(0),
+		total_capacity(0),
+		min_block_capacity(default_min_block_capacity()),
+		max_block_capacity(default_max_block_capacity())
+	{}
+
+
+
+	constexpr hive() noexcept(noexcept(allocator_type())) :
+		hive(allocator_type())
+	{}
+
+
+
+	hive(const hive_limits capacities, const allocator_type &alloc):
+		allocator_type(alloc),
+		groups_with_erasures_list_head(nullptr),
+		unused_groups_head(nullptr),
+		total_size(0),
+		total_capacity(0),
+		min_block_capacity(static_cast<skipfield_type>(capacities.min)),
+		max_block_capacity(static_cast<skipfield_type>(capacities.max))
 	{
-		assert(&source != this);
-		source.blank();
+		check_capacities_conformance(capacities);
 	}
 
 
 
-	// Move constructor (allocator-extended):
+	explicit hive(const hive_limits capacities) noexcept(noexcept(allocator_type())):
+		hive(capacities, allocator_type())
+	{}
+
+
+
+	// Copy constructors:
+
+	hive(const hive &source, const std::type_identity_t<allocator_type> &alloc):
+		allocator_type(alloc),
+		groups_with_erasures_list_head(nullptr),
+		unused_groups_head(nullptr),
+		total_size(0),
+		total_capacity(0),
+		min_block_capacity(static_cast<skipfield_type>((source.min_block_capacity > source.total_size) ? source.min_block_capacity : ((source.total_size > source.max_block_capacity) ? source.max_block_capacity : source.total_size))), // min group size is set to value closest to total number of elements in source hive, in order to not create unnecessary small groups in the range-insert below, then reverts to the original min group size afterwards. This effectively saves a call to reserve.
+		max_block_capacity(source.max_block_capacity)
+	{ // can skip checking for skipfield conformance here as source will have already checked theirs. Same applies for other copy and move constructors below
+		range_assign(source.begin_iterator, source.total_size);
+		min_block_capacity = source.min_block_capacity; // reset to correct value for future operations
+	}
+
+
+
+	hive(const hive &source):
+		hive(source, std::allocator_traits<allocator_type>::select_on_container_copy_construction(source))
+	{}
+
+
+
+	// Move constructors:
 
 	hive(hive &&source, const std::type_identity_t<allocator_type> &alloc):
 		allocator_type(alloc),
@@ -1571,6 +1520,11 @@ public:
 		assert(&source != this);
 		source.blank();
 	}
+
+
+  	hive(hive &&source) noexcept:
+		hive(std::move(source), std::move(source))
+	{}
 
 
 
@@ -1635,6 +1589,7 @@ public:
 	}
 
 
+
 	template<typename iterator_type>
 	hive(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last, const allocator_type &alloc = allocator_type()):
 		hive(first, last, default_block_capacity_limits(), alloc)
@@ -1656,6 +1611,7 @@ public:
 		check_capacities_conformance(block_limits);
 		range_assign(element_list.begin(), static_cast<size_type>(element_list.size()));
 	}
+
 
 
 	hive(const std::initializer_list<element_type> &element_list, const allocator_type &alloc = allocator_type()):
@@ -1680,6 +1636,7 @@ public:
 		check_capacities_conformance(block_limits);
 		range_assign(std::ranges::begin(rg), static_cast<size_type>(std::ranges::distance(rg)));
 	}
+
 
 
 	template<class range_type>
@@ -3632,7 +3589,6 @@ private:
 
 
 
-
 public:
 
 
@@ -3848,14 +3804,16 @@ public:
 
 
 
-	void trim_capacity(const size_type max_elements) noexcept
+	void trim_capacity(const size_type capacity_retain) noexcept
 	{
-		if (end_iterator.element_pointer == nullptr)
+		const size_type capacity_difference = total_capacity - capacity_retain;
+
+		if (end_iterator.element_pointer == nullptr || total_capacity <= capacity_retain || total_size >= capacity_retain || capacity_difference < min_block_capacity)
 		{
 			return;
 		}
 
-		size_type number_of_elements_to_remove = max_elements;
+		size_type number_of_elements_to_remove = capacity_difference;
 
 		for (group_pointer_type current_group = unused_groups_head, previous_group = nullptr; current_group != nullptr;)
 		{
@@ -3914,7 +3872,7 @@ public:
 			}
 		}
 
-		total_capacity -= max_elements - number_of_elements_to_remove;
+		total_capacity -= capacity_difference - number_of_elements_to_remove;
 	}
 
 
@@ -4542,7 +4500,7 @@ namespace std
 
 	// std::reverse_iterator overload, to allow use of hive with ranges and make_reverse_iterator primarily:
 	template <plf::hive_iterator_concept it_type>
-	class reverse_iterator<it_type> : public it_type::parent::hive_reverse_iterator<std::is_same_v<typename it_type::constness, std::true_type> > {};
+	class reverse_iterator<it_type> : public it_type::reverse_type {};
 
 } // namespace std
 

@@ -230,7 +230,7 @@ int main()
 			failpass("Reverse iterator next and distance test", std::distance(p_hive.rbegin(), r_iterator2) == 52);
 
 
-			hive<int *>::reverse_iterator r_iterator3 = std::reverse_iterator(p_hive.begin());
+			hive<int *>::reverse_iterator r_iterator3 = std::make_reverse_iterator(p_hive.begin());
 
 			failpass("std::reverse_iterator and negative distance test", std::distance(p_hive.rend(), r_iterator3) == -1);
 
@@ -286,7 +286,7 @@ int main()
 			{
 				hive<int> trim_hive(2000, 10, {200, 200});
 				trim_hive.reserve(4000);
-				trim_hive.trim_capacity(1000);
+				trim_hive.trim_capacity(3000);
 				failpass("trim_capacity(n) test", trim_hive.capacity() == 3000);
 			}
 
