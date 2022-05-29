@@ -13,4 +13,4 @@ https://plflib.org/colony.htm
 
 Note: In terms of the Microsoft compiler, hive requires Visual Studio 2022 or later to compile properly (early versions have an unresolved bug).
 
-Note2: clang currently has some bugs that need resolving.
+Note2: Use plf::ranges::range_from in the parameters when calling rangesv3 constructor overloads. This will be updated with std::ranges::range_from when that feature becomes widely available in C++23-compliant compilers.
