@@ -7,6 +7,7 @@ The differences in plf::hive are as follows:
 * reset() function removed (use clear() followed by trim_capacity() instead) - simply to cut down on the user interface.
 * memory() removed as this was considered to be not in-keeping with previous container practice.
 * No support for user-specified internal sort routines to be used by member function sort() is given.
+* advance, prev, next and distance are std:: overloads, rather than hidden friends selected via ADL. This is only possible under C++20.
 
 Otherwise hive should follow the same rules as colony and be used in the same way. Colony documentation is here:
 https://plflib.org/colony.htm
