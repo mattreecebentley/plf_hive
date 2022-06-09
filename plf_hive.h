@@ -149,13 +149,15 @@ private:
 	};
 
 
-	// Calculate the capacity of a groups' elements+skipfield memory block when expressed in multiples of the value_type's alignment.
+	// Principally for dealing with over-aligned types:
+	static constexpr size_type aligned_size = (sizeof(aligned_element_type) > alignof(aligned_element_type)) ? sizeof(aligned_element_type) : alignof(aligned_element_type);
+
+
+	// Calculate the capacity of a groups' elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
 	// We also check to see if alignment is larger than sizeof value_type and use alignment size if so:
 	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
-		return ((elements_per_group * (((sizeof(aligned_element_type) >= alignof(aligned_element_type)) ?
-			sizeof(aligned_element_type) : alignof(aligned_element_type)) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1)
-			/ sizeof(aligned_allocation_struct);
+		return ((elements_per_group * (aligned_size + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
 	}
 
 
@@ -244,7 +246,7 @@ private:
 	//  Member variables:
 
 	iterator 				end_iterator, begin_iterator;
-	group_pointer_type	erasure_groups_head,	// Head of singly-linked list of groups which have erased-element memory locations available for re-use
+	group_pointer_type	erasure_groups_head,	// Head of doubly-linked list of groups which have erased-element memory locations available for re-use
 								unused_groups_head;	// Head of singly-linked list of reserved groups retained by erase()/clear() or created by reserve()
 	size_type				total_size, total_capacity;
 	skipfield_type 		min_block_capacity, max_block_capacity;
@@ -255,11 +257,12 @@ private:
 	tuple_allocator_type tuple_allocator;
 
 
-	// Adaptive minimum based around sizeof(aligned_element_type), sizeof(group) and sizeof(hive):
+	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
 	static constexpr skipfield_type default_min_block_capacity() noexcept
 	{
-		return static_cast<skipfield_type>((sizeof(aligned_element_type) * 8 > (sizeof(hive<element_type>) + sizeof(group)) * 2) ?
-			8 : (((sizeof(hive<element_type>) + sizeof(group)) * 2) / sizeof(aligned_element_type)));
+		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>((sizeof(hive) + sizeof(group)) * 2 / aligned_size);
+		constexpr skipfield_type max_block_capacity = default_max_block_capacity(); // Check against in situations with > 64bit pointer sizes and small sizeof(T)
+		return (8 > adaptive_size) ? 8 : (adaptive_size > max_block_capacity) ? max_block_capacity : adaptive_size;
 	}
 
 
@@ -352,7 +355,6 @@ public:
 		aligned_struct_allocator(*this),
 		skipfield_allocator(*this),
 		tuple_allocator(*this)
-
 	{
 		check_capacities_conformance(capacities);
 	}
@@ -612,7 +614,7 @@ public:
 
 	const_reverse_iterator rbegin() const noexcept
 	{
-		return (end_iterator.group_pointer != nullptr) ? ++const_reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return crbegin();
 	}
 
 
@@ -626,7 +628,7 @@ public:
 
 	const_reverse_iterator rend() const noexcept
 	{
-		return const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return crend();
 	}
 
 
@@ -658,7 +660,7 @@ private:
 
 	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, group_pointer_type const previous = nullptr)
 	{
-		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, 0);
+		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
 
 		try
 		{
@@ -853,19 +855,12 @@ private:
 
 
 
-	size_type get_new_group_number() const noexcept
-	{
-		return end_iterator.group_pointer->group_number + 1u;
-	}
-
-
-
 	group_pointer_type reuse_unused_group()
 	{
 		group_pointer_type const next_group = unused_groups_head;
 		unused_groups_head = next_group->next_group;
 		reset_group_numbers_if_necessary();
-		next_group->reset(1, nullptr, end_iterator.group_pointer, get_new_group_number());
+		next_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
 		return next_group;
 	}
 
@@ -1229,7 +1224,7 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
 			{
-				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
+				if constexpr (aligned_size != sizeof(element_type))
 				{
 					alignas (alignof(aligned_element_type)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
 					std::fill_n(end_iterator.element_pointer, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
@@ -1306,7 +1301,7 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
 			{
-				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
+				if constexpr (aligned_size != sizeof(element_type))
 				{
 					alignas (alignof(aligned_element_type)) element_type aligned_copy = element;
 					std::fill_n(location, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
@@ -1486,7 +1481,7 @@ public:
 			reset_group_numbers();
 		}
 
-		fill_unused_groups(size, element, get_new_group_number(), end_iterator.group_pointer, unused_groups_head);
+		fill_unused_groups(size, element, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
 
@@ -1693,7 +1688,7 @@ private:
 			reset_group_numbers();
 		}
 
-		range_fill_unused_groups(size, it, get_new_group_number(), end_iterator.group_pointer, unused_groups_head);
+		range_fill_unused_groups(size, it, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
 
@@ -1721,7 +1716,7 @@ public:
 
 
 
-	// Initializer-list insert
+	// Initializer-list insert:
 
 	void insert (const std::initializer_list<element_type> &element_list)
 	{
@@ -3122,7 +3117,7 @@ public:
 
 				if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) >= source_group_count)
 				{
-					update_subsequent_group_numbers(get_new_group_number(), source.begin_iterator.group_pointer);
+					update_subsequent_group_numbers(end_iterator.group_pointer->group_number + 1u, source.begin_iterator.group_pointer);
 				}
 				else
 				{
@@ -3388,6 +3383,25 @@ public:
 			} // else: undefined behaviour, as per standard
 		}
 	}
+
+
+
+	#ifdef PLF_BENCH_H // used for benchmarking only
+		size_type memory() const noexcept
+		{
+			size_type memory_use = sizeof(*this); // sizeof colony basic structure
+			end_iterator.group_pointer->next_group = unused_groups_head; // temporarily link the main groups and unused groups (reserved groups) in order to only have one loop below instead of several
+
+			for(group_pointer_type current = begin_iterator.group_pointer; current != nullptr; current = current->next_group)
+			{
+				memory_use += sizeof(group) + (get_aligned_block_capacity(current->capacity) * sizeof(aligned_allocation_struct)); // add memory block sizes and the size of the group structs themselves. The original calculation, including divisor, is necessary in order to correctly round up the number of allocations
+			}
+
+			end_iterator.group_pointer->next_group = nullptr; // unlink main groups and unused groups
+			return memory_use;
+		}
+	#endif
+
 
 
 
