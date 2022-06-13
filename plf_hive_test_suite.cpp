@@ -987,7 +987,7 @@ int main()
 			small_struct_non_trivial ss(5);
 
 			unsigned int size, range1 = 0, range2 = 0, internal_loop_counter;
-			int counter, sum1 = 0;
+			int counter;
 
 			ss_nt.insert(10000, ss);
 
@@ -997,7 +997,6 @@ int main()
 			for (hive<small_struct_non_trivial>::iterator ss_it = ss_nt.begin(); ss_it != ss_nt.end(); ++ss_it)
 			{
 				ss_it = ss_nt.erase(ss_it);
-				sum1 += ss_it->number;
 				++range1;
 			}
 

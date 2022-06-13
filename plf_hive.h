@@ -57,6 +57,7 @@ namespace plf
 }
 
 
+
 // Overloads for advance etc must be defined here as they are called by range-assign/insert functions - otherwise compiler will call std:: bidirectional overloads:
 namespace std
 {
@@ -91,9 +92,7 @@ namespace std
 	{
 		return first.distance(last);
 	}
-
 }
-
 
 
 
@@ -117,7 +116,7 @@ class hive : private allocator_type // Empty base class optimisation - inheritin
 public:
 	// Standard container typedefs:
 	typedef element_type value_type;
-	typedef typename std::aligned_storage<sizeof(element_type), (sizeof(element_type) >= (sizeof(skipfield_type) * 2) || alignof(element_type) >= (sizeof(skipfield_type) * 2)) ? alignof(element_type) : (sizeof(skipfield_type) * 2)>::type aligned_element_type;
+	typedef typename std::aligned_storage<sizeof(element_type), (sizeof(element_type) >= (sizeof(skipfield_type) * 2) || alignof(element_type) >= (sizeof(skipfield_type) * 2)) ? alignof(element_type) : (sizeof(skipfield_type) * 2)>::type aligned_element_type; // align element to be at-least 2*skipfield_type width in order to support free list indexes in erased element memory space
 	typedef typename std::allocator_traits<allocator_type>::size_type 			size_type;
 	typedef typename std::allocator_traits<allocator_type>::difference_type 	difference_type;
 	typedef element_type &																		reference;
@@ -143,21 +142,19 @@ public:
 
 private:
 
+	// We use this for allocation of the elements/skipfield block, as it ensures that the block and subsequently, the elements will be aligned correctly by the allocator and that we do not create much wasted space (unless the alignment is very large)
+	// Using the aligned type sizeof for this would result in a lot of wasted space in the skipfield)
 	struct alignas(alignof(aligned_element_type)) aligned_allocation_struct
 	{
 	  char data[alignof(aligned_element_type)]; // Using char as sizeof is always guaranteed to be 1 byte regardless of the number of bits in a byte on given computer, whereas for example, uint8_t would fail on machines where there are more than 8 bits in a byte eg. Texas Instruments C54x DSPs.
 	};
 
 
-	// Principally for dealing with over-aligned types:
-	static constexpr size_type aligned_size = (sizeof(aligned_element_type) > alignof(aligned_element_type)) ? sizeof(aligned_element_type) : alignof(aligned_element_type);
-
-
 	// Calculate the capacity of a groups' elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
 	// We also check to see if alignment is larger than sizeof value_type and use alignment size if so:
 	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
-		return ((elements_per_group * (aligned_size + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
+		return ((elements_per_group * (sizeof(aligned_element_type) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
 	}
 
 
@@ -260,8 +257,8 @@ private:
 	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
 	static constexpr skipfield_type default_min_block_capacity() noexcept
 	{
-		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>((sizeof(hive) + sizeof(group)) * 2 / aligned_size);
-		constexpr skipfield_type max_block_capacity = default_max_block_capacity(); // Check against in situations with > 64bit pointer sizes and small sizeof(T)
+		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>(((sizeof(hive) + sizeof(group)) * 2) / sizeof(aligned_element_type));
+		constexpr skipfield_type max_block_capacity = default_max_block_capacity(); // Necessary to check against in situations with > 64bit pointer sizes and small sizeof(T)
 		return (8 > adaptive_size) ? 8 : (adaptive_size > max_block_capacity) ? max_block_capacity : adaptive_size;
 	}
 
@@ -657,7 +654,6 @@ public:
 
 private:
 
-
 	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, group_pointer_type const previous = nullptr)
 	{
 		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
@@ -902,7 +898,6 @@ public:
 				if (unused_groups_head == nullptr)
 				{
 					const skipfield_type new_group_size = (total_size < static_cast<size_type>(max_block_capacity)) ? static_cast<skipfield_type>(total_size) : max_block_capacity;
-
 					reset_group_numbers_if_necessary();
 					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
 
@@ -1224,7 +1219,7 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
 			{
-				if constexpr (aligned_size != sizeof(element_type))
+				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
 				{
 					alignas (alignof(aligned_element_type)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
 					std::fill_n(end_iterator.element_pointer, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
@@ -1301,7 +1296,7 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
 			{
-				if constexpr (aligned_size != sizeof(element_type))
+				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
 				{
 					alignas (alignof(aligned_element_type)) element_type aligned_copy = element;
 					std::fill_n(location, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
@@ -1705,13 +1700,12 @@ public:
 
 
 
-
 	// Range insert, move_iterator overload:
 
 	template <class iterator_type>
 	void insert (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
 	{
-		range_insert(first, static_cast<size_type>(std::distance(first.base(),last.base())));
+		range_insert(first, static_cast<size_type>(std::distance(first.base(), last.base())));
 	}
 
 
@@ -3213,7 +3207,6 @@ private:
 
 public:
 
-
 	template <class comparison_function>
 	void sort(comparison_function compare)
 	{
@@ -3371,7 +3364,8 @@ public:
 				allocator_type swap_allocator = std::move(static_cast<allocator_type &>(source));
 				static_cast<allocator_type &>(source) = std::move(static_cast<allocator_type &>(*this));
 				static_cast<allocator_type &>(*this) = std::move(swap_allocator);
-				// Reconstruct rebinds for new allocators:
+
+				// Reconstruct rebinds for swapped allocators:
 				group_allocator = group_allocator_type(*this);
 				aligned_struct_allocator = aligned_struct_allocator_type(*this);
 				skipfield_allocator = skipfield_allocator_type(*this);
@@ -4588,8 +4582,8 @@ namespace std
 	typename plf::hive<element_type, allocator_type>::size_type erase_if(plf::hive<element_type, allocator_type> &container, predicate_function predicate)
 	{
 		typedef typename plf::hive<element_type, allocator_type> hive;
-		typedef typename hive::const_iterator	const_iterator;
-		typedef typename hive::size_type			size_type;
+		typedef typename hive::const_iterator 	const_iterator;
+		typedef typename hive::size_type 		size_type;
 		size_type count = 0;
 
 		const const_iterator end = container.cend();
@@ -4641,7 +4635,7 @@ namespace std
 	class reverse_iterator<it_type> : public it_type::reverse_type
 	{
 	public:
-		typedef it_type::reverse_type rit;
+		typedef typename it_type::reverse_type rit;
 		using rit::rit;
 	};
 
