@@ -21,6 +21,7 @@
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
 #define __cpp_lib_hive
+#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the behaviour in order to not break ABI, we have to specify this.
 
 #include <algorithm> // std::fill_n, std::sort
 #include <cassert>	// assert
@@ -142,17 +143,16 @@ public:
 
 private:
 
-	// We use this for allocation of the elements/skipfield block, as it ensures that the block and subsequently, the elements will be aligned correctly by the allocator and that we do not create much wasted space (unless the alignment is very large)
-	// Using the aligned type sizeof for this would result in a lot of wasted space in the skipfield)
+	// We combine the allocation of elements and skipfield into one allocation to save performance. Memory has to be allocated as an aligned type in order to align with memory boundaries correctly (as opposed to being allocated as char or uint_8). We use the following struct for allocation of the elements/skipfield block, as it ensures that the block - and subsequently the elements - will be aligned correctly by the allocator and that we do not create much wasted space in the skipfield (unless the alignof is very large)
+	// Using the aligned type sizeof here instead of alignof would usually result in a lot of wasted space in the skipfield unless type is overaligned (in which case sizeof wouldn't work properly).
 	struct alignas(alignof(aligned_element_type)) aligned_allocation_struct
 	{
 	  char data[alignof(aligned_element_type)]; // Using char as sizeof is always guaranteed to be 1 byte regardless of the number of bits in a byte on given computer, whereas for example, uint8_t would fail on machines where there are more than 8 bits in a byte eg. Texas Instruments C54x DSPs.
 	};
 
 
-	// Calculate the capacity of a groups' elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
-	// We also check to see if alignment is larger than sizeof value_type and use alignment size if so:
-	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
+	// Calculate the capacity of a group's elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
+	size_type get_aligned_block_capacity(const skipfield_type elements_per_group) const noexcept
 	{
 		return ((elements_per_group * (sizeof(aligned_element_type) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
 	}
@@ -201,7 +201,6 @@ private:
 		size_type								group_number;				// Used for comparison (> < >= <= <=>) iterator operators (used by distance function and user).
 
 
-		// Group elements allocation explanation: memory has to be allocated as an aligned type in order to align with memory boundaries correctly (as opposed to being allocated as char or uint_8). Unfortunately this makes combining the element memory block and the skipfield memory block into one allocation (which increases performance) a little more tricky. Specifically it means in many cases the allocation will amass more memory than is needed, particularly if the element type is large.
 
 		group(aligned_struct_allocator_type &aligned_struct_allocator, const skipfield_type elements_per_group, group_pointer_type const previous):
 			last_endpoint(convert_pointer<aligned_pointer_type>( /* Because this variable occurs first in the struct, we allocate here initially, then increment its value in the element initialisation below. As opposed to doing a secondary assignment in the code */
@@ -240,7 +239,7 @@ private:
 
 
 
-	//  Member variables:
+	// Hive member variables:
 
 	iterator 				end_iterator, begin_iterator;
 	group_pointer_type	erasure_groups_head,	// Head of doubly-linked list of groups which have erased-element memory locations available for re-use
@@ -252,6 +251,7 @@ private:
 	aligned_struct_allocator_type aligned_struct_allocator;
 	skipfield_allocator_type skipfield_allocator;
 	tuple_allocator_type tuple_allocator;
+
 
 
 	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
@@ -463,6 +463,7 @@ public:
 		check_capacities_conformance(block_limits);
 		assign(fill_number, element_type());
 	}
+
 
 
 	hive(const size_type fill_number, const allocator_type &alloc = allocator_type()):
