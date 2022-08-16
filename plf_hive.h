@@ -21,7 +21,7 @@
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
 #define __cpp_lib_hive
-#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the behaviour in order to not break ABI, we have to specify this.
+#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the default behaviour in order to not break ABI, we have to specify this
 
 #include <algorithm> // std::fill_n, std::sort
 #include <cassert>	// assert
@@ -48,13 +48,16 @@ namespace plf
 	template <class T>
 	concept hive_iterator_concept = requires { typename T::hive_iterator_tag; };
 
+	#ifndef PLF_FROM_RANGE // To ensure interoperability with other plf lib containers
+		#define PLF_FROM_RANGE
 
-	// Until such point as standard libraries include std::ranges::from_range_t, including this so the rangesv3 constructor overloads will work unambiguously:
-	namespace ranges
-	{
-		struct from_range_t {};
-		inline constexpr from_range_t from_range;
-	}
+		// Until such point as standard libraries include std::ranges::from_range_t, including this so the rangesv3 constructor overloads will work unambiguously:
+		namespace ranges
+		{
+			struct from_range_t {};
+			inline constexpr from_range_t from_range;
+		}
+	#endif
 }
 
 
@@ -152,7 +155,7 @@ private:
 
 
 	// Calculate the capacity of a group's elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
-	size_type get_aligned_block_capacity(const skipfield_type elements_per_group) const noexcept
+	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
 		return ((elements_per_group * (sizeof(aligned_element_type) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
 	}
@@ -162,7 +165,14 @@ private:
 	template <class destination_pointer_type, class source_pointer_type>
 	static constexpr destination_pointer_type convert_pointer(const source_pointer_type source_pointer) noexcept
 	{
- 		return destination_pointer_type(std::to_address(source_pointer));
+		if constexpr (std::is_trivial<destination_pointer_type>::value && std::is_trivial<source_pointer_type>::value)
+		{
+			return std::bit_cast<destination_pointer_type>(source_pointer);
+		}
+		else
+		{
+			return destination_pointer_type(std::to_address(source_pointer));
+		}
 	}
 
 
@@ -413,9 +423,24 @@ public:
 	}
 
 
+
   	hive(hive &&source) noexcept:
-		hive(std::move(source), static_cast<allocator_type &>(source))
-	{}
+		end_iterator(std::move(source.end_iterator)),
+		begin_iterator(std::move(source.begin_iterator)),
+		erasure_groups_head(std::move(source.erasure_groups_head)),
+		unused_groups_head(std::move(source.unused_groups_head)),
+		total_size(source.total_size),
+		total_capacity(source.total_capacity),
+		min_block_capacity(source.min_block_capacity),
+		max_block_capacity(source.max_block_capacity),
+		group_allocator(*this),
+		aligned_struct_allocator(*this),
+		skipfield_allocator(*this),
+		tuple_allocator(*this)
+	{
+		assert(&source != this);
+		source.blank();
+	}
 
 
 
@@ -3129,7 +3154,7 @@ public:
 			*this = std::move(source);
 
 			// Add capacity for unused_groups back into *this:
-			for (group_pointer_type current =  unused_groups_head_original; current != nullptr; current = current->next_group)
+			for (group_pointer_type current = unused_groups_head_original; current != nullptr; current = current->next_group)
 			{
 				total_capacity += current->capacity;
 			}
