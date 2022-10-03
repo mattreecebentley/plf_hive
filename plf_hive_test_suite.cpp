@@ -1511,7 +1511,7 @@ int main()
 			{
 				hive<int> hive1, hive2;
 
-				for(int number = 0; number != 100; ++number)
+				for (int number = 0; number != 100; ++number)
 				{
 					hive1.insert(number);
 					hive2.insert(number + 100);

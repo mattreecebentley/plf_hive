@@ -21,7 +21,7 @@
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
 #define __cpp_lib_hive
-#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the default behaviour in order to not break ABI, we have to specify this
+#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the default behaviour in order to not break old software, we have to specify this
 
 #include <algorithm> // std::fill_n, std::sort
 #include <cassert>	// assert
@@ -36,7 +36,7 @@
 #include <utility> // std::move
 #include <initializer_list>
 #include <concepts>
-#include <compare> // std::strong_ordering
+#include <compare> // std::strong_ordering, std::to_address
 #include <bit> // std::bit_cast
 #include <ranges>
 
@@ -120,14 +120,12 @@ class hive : private allocator_type // Empty base class optimisation - inheritin
 public:
 	// Standard container typedefs:
 	typedef element_type value_type;
-	typedef typename std::aligned_storage<sizeof(element_type), (sizeof(element_type) >= (sizeof(skipfield_type) * 2) || alignof(element_type) >= (sizeof(skipfield_type) * 2)) ? alignof(element_type) : (sizeof(skipfield_type) * 2)>::type aligned_element_type; // align element to be at-least 2*skipfield_type width in order to support free list indexes in erased element memory space
 	typedef typename std::allocator_traits<allocator_type>::size_type 			size_type;
 	typedef typename std::allocator_traits<allocator_type>::difference_type 	difference_type;
 	typedef element_type &																		reference;
 	typedef const element_type &																const_reference;
 	typedef typename std::allocator_traits<allocator_type>::pointer				pointer;
 	typedef typename std::allocator_traits<allocator_type>::const_pointer		const_pointer;
-
 
 	// Iterator forward declarations:
 	template <bool is_const> class		hive_iterator;
@@ -146,18 +144,32 @@ public:
 
 private:
 
-	// We combine the allocation of elements and skipfield into one allocation to save performance. Memory has to be allocated as an aligned type in order to align with memory boundaries correctly (as opposed to being allocated as char or uint_8). We use the following struct for allocation of the elements/skipfield block, as it ensures that the block - and subsequently the elements - will be aligned correctly by the allocator and that we do not create much wasted space in the skipfield (unless the alignof is very large)
-	// Using the aligned type sizeof here instead of alignof would usually result in a lot of wasted space in the skipfield unless type is overaligned (in which case sizeof wouldn't work properly).
-	struct alignas(alignof(aligned_element_type)) aligned_allocation_struct
+	// The element as allocated in memory needs to be at-least 2*skipfield_type width in order to support free list indexes in erased element memory space, so:
+   // make the size of this struct the larger of alignof(T), sizeof(T) or 2*skipfield_type (the latter is only relevant for type char/uchar), and
+   // make the alignment alignof(T).
+   // This type is used mainly for correct pointer arithmetic while iterating over elements in memory.
+	struct alignas(alignof(element_type)) aligned_element_struct
 	{
-	  char data[alignof(aligned_element_type)]; // Using char as sizeof is always guaranteed to be 1 byte regardless of the number of bits in a byte on given computer, whereas for example, uint8_t would fail on machines where there are more than 8 bits in a byte eg. Texas Instruments C54x DSPs.
+		 // Using char as sizeof is always guaranteed to be 1 byte regardless of the number of bits in a byte on given computer, whereas for example, uint8_t would fail on machines where there are more than 8 bits in a byte eg. Texas Instruments C54x DSPs.
+		char data[
+		(sizeof(element_type) < (sizeof(skipfield_type) * 2)) ?
+		((sizeof(skipfield_type) * 2) < alignof(element_type) ? alignof(element_type) : (sizeof(skipfield_type) * 2)) :
+		((sizeof(element_type) < alignof(element_type)) ? alignof(element_type) : sizeof(element_type))
+		];
+	};
+
+
+		// We combine the allocation of elements and skipfield into one allocation to save performance. This memory must be allocated as an aligned type with the same alignment as T in order for the elements to align with memory boundaries correctly (which won't happen if we allocate as char or uint_8). But the larger the sizeof in the type we use for allocation, the greater the chance of creating a lot of unused memory in the skipfield portion of the allocated block. So we create a type that is sizeof(alignof(T)), as in most cases alignof(T) < sizeof(T). If alignof(t) >= sizeof(t) this makes no difference.
+	struct alignas(alignof(element_type)) aligned_allocation_struct
+	{
+	  char data[alignof(element_type)];
 	};
 
 
 	// Calculate the capacity of a group's elements+skipfield memory block when expressed in multiples of the value_type's alignment (rounding up).
 	static size_type get_aligned_block_capacity(const skipfield_type elements_per_group) noexcept
 	{
-		return ((elements_per_group * (sizeof(aligned_element_type) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
+		return ((elements_per_group * (sizeof(aligned_element_struct) + sizeof(skipfield_type))) + sizeof(skipfield_type) + sizeof(aligned_allocation_struct) - 1) / sizeof(aligned_allocation_struct);
 	}
 
 
@@ -182,14 +194,14 @@ private:
 	struct item_index_tuple; // for use in sort()
 
 
-	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<aligned_element_type>		aligned_element_allocator_type;
+	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<aligned_element_struct>		aligned_element_allocator_type;
 	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<group>							group_allocator_type;
 	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<skipfield_type>				skipfield_allocator_type;
 	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<aligned_allocation_struct> aligned_struct_allocator_type;
 	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<item_index_tuple> 			tuple_allocator_type;
 	typedef typename std::allocator_traits<allocator_type>::template rebind_alloc<unsigned char> 				uchar_allocator_type;
 
-	typedef typename std::allocator_traits<aligned_element_allocator_type>::pointer	aligned_pointer_type; // pointer to the overaligned element type, not the original element type
+	typedef typename std::allocator_traits<aligned_element_allocator_type>::pointer	aligned_pointer_type; // pointer to the (potentially overaligned) element type, not the original element type
 	typedef typename std::allocator_traits<group_allocator_type>::pointer				group_pointer_type;
 	typedef typename std::allocator_traits<skipfield_allocator_type>::pointer			skipfield_pointer_type;
 	typedef typename std::allocator_traits<aligned_struct_allocator_type>::pointer	aligned_struct_pointer_type;
@@ -267,7 +279,7 @@ private:
 	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
 	static constexpr skipfield_type default_min_block_capacity() noexcept
 	{
-		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>(((sizeof(hive) + sizeof(group)) * 2) / sizeof(aligned_element_type));
+		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>(((sizeof(hive) + sizeof(group)) * 2) / sizeof(aligned_element_struct));
 		constexpr skipfield_type max_block_capacity = default_max_block_capacity(); // Necessary to check against in situations with > 64bit pointer sizes and small sizeof(T)
 		return (8 > adaptive_size) ? 8 : (adaptive_size > max_block_capacity) ? max_block_capacity : adaptive_size;
 	}
@@ -305,7 +317,7 @@ private:
 	{
 		if constexpr (std::is_standard_layout<hive>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
 		{ // If all pointer types are trivial, we can just nuke the member variables from orbit with memset (nullptr is always 0):
-			std::memset(static_cast<void *>(&end_iterator), 0, offsetof(hive, min_block_capacity));
+			std::memset(static_cast<void *>(this), 0, offsetof(hive, min_block_capacity));
 		}
 		else
 		{
@@ -425,6 +437,7 @@ public:
 
 
   	hive(hive &&source) noexcept:
+		allocator_type(std::move(static_cast<allocator_type &>(source))),
 		end_iterator(std::move(source.end_iterator)),
 		begin_iterator(std::move(source.begin_iterator)),
 		erasure_groups_head(std::move(source.erasure_groups_head)),
@@ -1245,9 +1258,9 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
 			{
-				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
+				if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 				{
-					alignas (alignof(aligned_element_type)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
+					alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
 					std::fill_n(end_iterator.element_pointer, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
 				}
 				else
@@ -1322,9 +1335,9 @@ private:
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
 			{
-				if constexpr (sizeof(aligned_element_type) != sizeof(element_type))
+				if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 				{
-					alignas (alignof(aligned_element_type)) element_type aligned_copy = element;
+					alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
 					std::fill_n(location, size, *convert_pointer<aligned_pointer_type>(&aligned_copy));
 				}
 				else
