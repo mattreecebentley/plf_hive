@@ -21,7 +21,11 @@
 #ifndef PLF_HIVE_H
 #define PLF_HIVE_H
 #define __cpp_lib_hive
-#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the default behaviour in order to not break old software, we have to specify this
+
+#ifndef _ENABLE_EXTENDED_ALIGNED_STORAGE
+	#define _ENABLE_EXTENDED_ALIGNED_STORAGE // Because MSVC didn't implement aligned_storage correctly in the past and avoids changing the default behaviour in order to not break old software, we have to specify this to enable correct aligning behaviour in MSVC.
+	#define PLF_ALIGNED_STORAGE_DEFINED // Use to signify that we need to undef the above at the end of the file, in case the code using this relies on the aforementioned old aligned_storage behaviour
+#endif
 
 #include <algorithm> // std::fill_n, std::sort
 #include <cassert>	// assert
@@ -1486,10 +1490,9 @@ public:
 
 		// Use up remaining available element locations in end group:
 		// This variable is either the remaining capacity of the group or the number of elements yet to be filled, whichever is smaller:
-		const skipfield_type group_remainder = (static_cast<skipfield_type>(
-			convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) >= size) ?
-			static_cast<skipfield_type>(size) :
-			static_cast<skipfield_type>(convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer);
+		const skipfield_type group_remainder = static_cast<skipfield_type>(
+			(static_cast<size_type>(convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) >= size) ?
+			size : convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer);
 
 		if (group_remainder != 0)
 		{
@@ -1693,11 +1696,9 @@ private:
 			}
 		}
 
-
-		const skipfield_type group_remainder = (static_cast<skipfield_type>(
-			convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) >= size) ?
-			static_cast<skipfield_type>(size) :
-			static_cast<skipfield_type>(convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer);
+		const skipfield_type group_remainder = static_cast<skipfield_type>(
+			(static_cast<size_type>(convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) >= size) ?
+			size : convert_pointer<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer);
 
 		if (group_remainder != 0)
 		{
@@ -4680,5 +4681,10 @@ namespace std
 
 } // namespace std
 
+
+#ifdef PLF_ALIGNED_STORAGE_DEFINED // undef if was not already defined prior to inclusion of this header
+	#undef _ENABLE_EXTENDED_ALIGNED_STORAGE
+	#undef PLF_ALIGNED_STORAGE_DEFINED
+#endif
 
 #endif // PLF_HIVE_H
