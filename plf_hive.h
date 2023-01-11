@@ -31,7 +31,6 @@
 
 #if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
 	#undef PLF_EXCEPTIONS_SUPPORT
-#else
 	#include <exception> // std::terminate
 #endif
 
