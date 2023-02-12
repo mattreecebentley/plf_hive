@@ -157,9 +157,9 @@ public:
 private:
 
 	// The element as allocated in memory needs to be at-least 2*skipfield_type width in order to support free list indexes in erased element memory space, so:
-   // make the size of this struct the larger of alignof(T), sizeof(T) or 2*skipfield_type (the latter is only relevant for type char/uchar), and
-   // make the alignment alignof(T).
-   // This type is used mainly for correct pointer arithmetic while iterating over elements in memory.
+	// make the size of this struct the larger of alignof(T), sizeof(T) or 2*skipfield_type (the latter is only relevant for type char/uchar), and
+	// make the alignment alignof(T).
+	// This type is used mainly for correct pointer arithmetic while iterating over elements in memory.
 	struct alignas(alignof(element_type)) aligned_element_struct
 	{
 		 // Using char as sizeof is always guaranteed to be 1 byte regardless of the number of bits in a byte on given computer, whereas for example, uint8_t would fail on machines where there are more than 8 bits in a byte eg. Texas Instruments C54x DSPs.
@@ -4112,9 +4112,9 @@ public:
 			{
 				distance += iterator2.skipfield_pointer - iterator1.skipfield_pointer;
 			}
- 			else if (iterator2.group_pointer->last_endpoint - 1 >= iterator2.element_pointer || iterator2.element_pointer + 1 + *(iterator2.skipfield_pointer + 1) == iterator2.group_pointer->last_endpoint) // ie. if iterator2 is .end() or the last element in the block
+ 			else if (iterator1.element_pointer == iterator2.group_pointer->elements + *(iterator2.group_pointer->skipfield) && iterator2.element_pointer + 1 + *(iterator2.skipfield_pointer + 1) == iterator2.group_pointer->last_endpoint) // ie. if iterator1 is at beginning of block (have to check this in case first and last are in the same block to begin with) and iterator2 is last element in the block
 			{
-				distance += static_cast<difference_type>(iterator2.group_pointer->size) - (iterator2.group_pointer->last_endpoint - iterator2.element_pointer);
+				distance += static_cast<difference_type>(iterator2.group_pointer->size) - 1;
 			}
 			else
 			{
@@ -4192,13 +4192,17 @@ public:
 
 		hive_reverse_iterator (const hive_iterator<is_const_r> &source) noexcept:
 			current(source)
-		{}
+		{
+			++(*this);
+		}
 
 
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
 		hive_reverse_iterator (const hive_iterator<false> &source) noexcept:
 			current(source)
-		{}
+		{
+			++(*this);
+		}
 
 
 		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept:
@@ -4215,6 +4219,7 @@ public:
 		hive_reverse_iterator& operator = (const hive_iterator<is_const_r> &source) noexcept
 		{
 			current = source;
+			++(*this);
 			return *this;
 		}
 
@@ -4223,6 +4228,7 @@ public:
 		hive_reverse_iterator& operator = (const hive_iterator<false> &source) noexcept
 		{
 			current = source;
+			++(*this);
 			return *this;
 		}
 

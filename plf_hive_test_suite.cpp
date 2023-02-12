@@ -1,3 +1,5 @@
+// Basic feature testing code for hive
+
 #include <numeric> // std::accumulate
 #include <functional> // std::greater, std::bind
 #include <vector> // range-insert testing
@@ -117,17 +119,17 @@ int main()
 	for (unsigned int looper = 0; looper != 100; ++looper)
 	{
 		{
-			title1("Colony");
+			title1("hive");
 			title2("Test Basics");
 
 			hive<int *> p_hive;
 
-			failpass("Colony empty", p_hive.empty());
+			failpass("hive empty", p_hive.empty());
 
 			int ten = 10;
 			p_hive.insert(&ten);
 
-			failpass("Colony not-empty", !p_hive.empty());
+			failpass("hive not-empty", !p_hive.empty());
 
 			title2("Iterator tests");
 
@@ -165,6 +167,79 @@ int main()
 
 			failpass("Iterator + distance test", std::distance(p_hive.begin(), plus_twenty) == 20);
 			failpass("Iterator - distance test", std::distance(plus_two_hundred, p_hive.begin()) == -200);
+
+			{
+				hive<int> d_hive(1000, 1, {20, 20});
+
+				for (hive<int>::iterator current = d_hive.begin(), end = d_hive.end(); current!= end;)
+				{
+					if ((rand() & 7) == 0)
+					{
+						current = d_hive.erase(current);
+					}
+					else
+					{
+						++current;
+					}
+				}
+
+				int d_size = d_hive.size();
+
+				for (int counter = 0; counter != 10000; ++counter)
+				{
+					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
+					hive<int>::iterator first = d_hive.begin(), last;
+					std::advance(first, dist1);
+					last = first;
+					std::advance(last, dist2);
+
+					const int dist = std::distance(first, last);
+
+					if (dist != dist2)
+					{
+						printf("positive distance overload fuzz-test failed, real distance = %d, reported distance = %d, counter = %d, suite loop = %d", dist2, dist, counter, looper);
+						getchar();
+						abort();
+					}
+				}
+
+				failpass("Positive distance overload fuzz-test", true);
+
+
+				for (hive<int>::iterator current = d_hive.begin(), end = d_hive.end(); current!= end;)
+				{
+					if ((rand() & 3) == 0)
+					{
+						current = d_hive.erase(current);
+					}
+					else
+					{
+						++current;
+					}
+				}
+
+				d_size = d_hive.size();
+
+				for (int counter = 0; counter != 10000; ++counter)
+				{
+					const int dist1 = rand() % (d_size - 2), dist2 = rand() % (d_size - 2);
+					hive<int>::iterator first = d_hive.begin(), last = d_hive.begin();
+					std::advance(first, dist1);
+					std::advance(last, dist2);
+
+					const int dist = std::distance(first, last);
+
+					if (dist != dist2 - dist1)
+					{
+						printf("positive/negative distance overload fuzz-test failed, real distance = %d, reported distance = %d, counter = %d, suite loop = %d", dist2, dist, counter, looper);
+						getchar();
+						abort();
+					}
+				}
+
+				failpass("Positive/negative distance overload fuzz-test", true);
+			}
+
 
 			hive<int *>::const_iterator plus_two_hundred_c = plus_two_hundred;
 			hive<int *> hive_copy(plus_twenty, plus_two_hundred_c);
@@ -230,7 +305,7 @@ int main()
 			failpass("Reverse iterator next and distance test", std::distance(p_hive.rbegin(), r_iterator2) == 52);
 
 
-			hive<int *>::reverse_iterator r_iterator3 = std::make_reverse_iterator(p_hive.begin());
+			hive<int *>::reverse_iterator r_iterator3 = std::make_reverse_iterator(++(p_hive.begin()));
 
 			failpass("std::reverse_iterator and negative distance test", std::distance(p_hive.rend(), r_iterator3) == -1);
 
@@ -300,7 +375,7 @@ int main()
 			for(hive<int *>::reverse_iterator the_iterator = p_hive.rbegin(); the_iterator != p_hive.rend(); ++the_iterator)
 			{
 				hive<int *>::iterator it = the_iterator.base();
-				the_iterator = p_hive.erase(--it);
+				p_hive.erase(--it);
 				++total;
 			}
 
