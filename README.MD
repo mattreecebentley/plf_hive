@@ -2,6 +2,7 @@ plf::hive is a fork of plf::colony to match the current C++ standards proposal.
 The differences in plf::hive are as follows:
 * C++20 only.
 * ==, != and <=> container operators removed, as these were considered either too slow as order-inspecific operators, or too confusing as order-specific operators (for an unordered-insert container)
+* priority template parameter removed as was not considered useful enough to maintain in standard.
 * data() function removed, as may cause too much implementation specifity.
 * reset() function removed (use clear() followed by trim_capacity() instead) - simply to cut down on the user interface.
 * memory() removed as this was considered to be not in-keeping with previous container practice.
