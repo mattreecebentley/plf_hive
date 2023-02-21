@@ -80,7 +80,7 @@ namespace std
 	template <plf::hive_iterator_concept it_type, typename distance_type>
 	void advance(it_type &it, const distance_type distance)
 	{
-		it.advance(static_cast<typename it_type::difference_type>(distance));
+		it.advance(static_cast<typename iterator_traits<it_type>::difference_type>(distance));
 	}
 
 
@@ -758,8 +758,9 @@ private:
 						do
 						{
 							std::allocator_traits<allocator_type>::destroy(*this, convert_pointer<pointer>(begin_iterator.element_pointer));
-							begin_iterator.element_pointer += static_cast<size_type>(*++begin_iterator.skipfield_pointer) + 1u;
-							begin_iterator.skipfield_pointer += *begin_iterator.skipfield_pointer;
+							const skipfield_type skip = *(++begin_iterator.skipfield_pointer);
+							begin_iterator.element_pointer += static_cast<size_type>(skip) + 1u;
+							begin_iterator.skipfield_pointer += skip;
 						} while(begin_iterator.element_pointer != end_pointer); // ie. beyond end of available data
 
 						const group_pointer_type next_group = begin_iterator.group_pointer->next_group;
@@ -1994,9 +1995,8 @@ public:
 				return_iterator.group_pointer = it.group_pointer->next_group;
 				const aligned_pointer_type elements = return_iterator.group_pointer->elements;
 				const skipfield_pointer_type skipfield = return_iterator.group_pointer->skipfield;
-				const skipfield_type skip = *skipfield;
-				return_iterator.element_pointer = elements + skip;
-				return_iterator.skipfield_pointer = skipfield + skip;
+				return_iterator.element_pointer = elements + *skipfield;
+				return_iterator.skipfield_pointer = skipfield + *skipfield;
 			}
 
 			if (it.element_pointer == begin_iterator.element_pointer) // If original iterator was first element in hive, update it's value with the next non-erased element:
@@ -2219,9 +2219,8 @@ public:
 					do
 					{
 						std::allocator_traits<allocator_type>::destroy(*this, convert_pointer<pointer>(current.element_pointer)); // Destruct element
-						const skipfield_type skip = *(++current.skipfield_pointer);
-						current.element_pointer += static_cast<size_type>(skip) + 1u;
-						current.skipfield_pointer += skip;
+						current.element_pointer += static_cast<size_type>(*(++current.skipfield_pointer)) + 1u;
+						current.skipfield_pointer += *(current.skipfield_pointer);
 					} while (current.element_pointer != end);
 				}
 
@@ -2392,9 +2391,8 @@ public:
 					while(current.element_pointer != iterator2.element_pointer)
 					{
 						std::allocator_traits<allocator_type>::destroy(*this, convert_pointer<pointer>(current.element_pointer));
-						++current.skipfield_pointer;
-						current.element_pointer += static_cast<size_type>(*current.skipfield_pointer) + 1u;
-						current.skipfield_pointer += *current.skipfield_pointer;
+						current.element_pointer += static_cast<size_type>(*(++current.skipfield_pointer)) + 1u;
+						current.skipfield_pointer += *(current.skipfield_pointer);
 					}
 				}
 
@@ -3521,6 +3519,10 @@ public:
 	class hive_iterator
 	{
 	private:
+		typedef typename hive::group_pointer_type 		group_pointer_type;
+		typedef typename hive::aligned_pointer_type 		aligned_pointer_type;
+		typedef typename hive::skipfield_pointer_type 	skipfield_pointer_type;
+
 		group_pointer_type		group_pointer;
 		aligned_pointer_type 	element_pointer;
 		skipfield_pointer_type	skipfield_pointer;
@@ -3727,9 +3729,8 @@ public:
 
 			group_pointer = group_pointer->previous_group;
 			const skipfield_pointer_type skipfield = group_pointer->skipfield + group_pointer->capacity - 1;
-			const skipfield_type skip = *skipfield;
-			element_pointer = (group_pointer->last_endpoint - 1) - skip;
-			skipfield_pointer = skipfield - skip;
+			element_pointer = (group_pointer->last_endpoint - 1) - *skipfield;
+			skipfield_pointer = skipfield - *skipfield;
 			return *this;
 		}
 
@@ -3854,8 +3855,7 @@ public:
 
 						while(true)
 						{
-							++skipfield_pointer;
-							skipfield_pointer += *skipfield_pointer;
+							skipfield_pointer += *(++skipfield_pointer);
 							--distance;
 
 							if (skipfield_pointer == endpoint)
@@ -3923,8 +3923,7 @@ public:
 
 					do
 					{
-						++skipfield_pointer;
-						skipfield_pointer += *skipfield_pointer;
+						skipfield_pointer += *(++skipfield_pointer);
 					} while(--distance != 0);
 
 					element_pointer = group_pointer->elements + (skipfield_pointer - group_pointer->skipfield);
@@ -4089,8 +4088,7 @@ public:
 
 					while (iterator1.skipfield_pointer != endpoint)
 					{
-						++iterator1.skipfield_pointer;
-						iterator1.skipfield_pointer += *iterator1.skipfield_pointer;
+						iterator1.skipfield_pointer += *(++iterator1.skipfield_pointer);
 						++distance;
 					}
 				}
@@ -4120,8 +4118,7 @@ public:
 			{
 				while (iterator1.skipfield_pointer != iterator2.skipfield_pointer)
 				{
-					++iterator1.skipfield_pointer;
-					iterator1.skipfield_pointer += *iterator1.skipfield_pointer;
+					iterator1.skipfield_pointer += *(++iterator1.skipfield_pointer);
 					++distance;
 				}
 			}
@@ -4145,6 +4142,11 @@ public:
 	template <bool is_const_r>
 	class hive_reverse_iterator
 	{
+	private:
+		typedef typename hive::group_pointer_type 		group_pointer_type;
+		typedef typename hive::aligned_pointer_type 		aligned_pointer_type;
+		typedef typename hive::skipfield_pointer_type 	skipfield_pointer_type;
+
 	protected:
 		iterator current;
 
@@ -4176,7 +4178,6 @@ public:
 
 		hive_reverse_iterator () noexcept
 		{}
-
 
 
 		hive_reverse_iterator (const hive_reverse_iterator &source) noexcept:
@@ -4311,9 +4312,9 @@ public:
 		// In this case we have to redefine the algorithm, rather than using the internal iterator's -- operator, in order for the reverse_iterator to be allowed to reach rend() ie. begin_iterator - 1
 		hive_reverse_iterator & operator ++ ()
 		{
-			hive::group_pointer_type &group_pointer = current.group_pointer;
-			hive::aligned_pointer_type &element_pointer = current.element_pointer;
-			hive::skipfield_pointer_type &skipfield_pointer = current.skipfield_pointer;
+			group_pointer_type &group_pointer = current.group_pointer;
+			aligned_pointer_type &element_pointer = current.element_pointer;
+			skipfield_pointer_type &skipfield_pointer = current.skipfield_pointer;
 
 			assert(group_pointer != nullptr);
 
@@ -4576,8 +4577,7 @@ public:
 
 						while(true)
 						{
-							++skipfield_pointer;
-							skipfield_pointer += *skipfield_pointer;
+							skipfield_pointer += *(++skipfield_pointer);
 							--distance;
 
 							if (skipfield_pointer == endpoint)
@@ -4648,8 +4648,7 @@ public:
 
 					do
 					{
-						++skipfield_pointer;
-						skipfield_pointer += *skipfield_pointer;
+						skipfield_pointer += *(++skipfield_pointer);
 					} while(--distance != 0);
 
 					element_pointer = group_pointer->elements + (skipfield_pointer - group_pointer->skipfield);
@@ -4767,7 +4766,7 @@ namespace std
 
 #undef PLF_EXCEPTIONS_SUPPORT
 
-#ifdef PLF_ALIGNED_STORAGE_DEFINED // undef if was not already defined prior to inclusion of this header
+#ifdef PLF_ALIGNED_STORAGE_DEFINED // ie. undef macro if it was not already defined prior to inclusion of this header
 	#undef _ENABLE_EXTENDED_ALIGNED_STORAGE
 	#undef PLF_ALIGNED_STORAGE_DEFINED
 #endif
