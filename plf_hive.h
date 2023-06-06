@@ -127,7 +127,7 @@ struct hive_limits // for use in block_capacity setting/getting functions and co
 template <class element_type, class allocator_type = std::allocator<element_type> >
 class hive : private allocator_type // Empty base class optimisation - inheriting allocator functions
 {
-	typedef std::conditional_t<(sizeof(element_type) > 10), uint_least16_t, uint_least8_t> skipfield_type;
+	typedef std::conditional_t<(sizeof(element_type) > 10 || alignof(element_type) > 10), uint_least16_t, uint_least8_t> skipfield_type;
 
 public:
 	// Standard container typedefs:
@@ -191,7 +191,7 @@ private:
 	{
 		if constexpr (std::is_trivial<destination_pointer_type>::value && std::is_trivial<source_pointer_type>::value)
 		{
-			return std::bit_cast<destination_pointer_type>(source_pointer);
+			return reinterpret_cast<destination_pointer_type>(source_pointer);
 		}
 		else
 		{
@@ -251,7 +251,7 @@ private:
 			erasures_list_previous_group(nullptr),
 			group_number((previous == nullptr) ? 0 : previous->group_number + 1u)
 		{
-			std::memset(convert_pointer<void *>(skipfield), 0, sizeof(skipfield_type) * (static_cast<size_type>(elements_per_group) + 1u));
+			std::memset(static_cast<void *>(std::to_address(skipfield)), 0, sizeof(skipfield_type) * (static_cast<size_type>(elements_per_group) + 1u));
 		}
 
 
@@ -267,7 +267,7 @@ private:
 			erasures_list_previous_group = nullptr;
 			group_number = group_num;
 
-			std::memset(convert_pointer<void *>(skipfield), 0, sizeof(skipfield_type) * static_cast<size_type>(capacity)); // capacity + 1 is not necessary here as the final skipfield node is never written to after initialization
+			std::memset(static_cast<void *>(std::to_address(skipfield)), 0, sizeof(skipfield_type) * static_cast<size_type>(capacity)); // capacity + 1 is not necessary here as the final skipfield node is never written to after initialization
 		}
 	};
 
@@ -2195,7 +2195,7 @@ public:
 
 				if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active will work
 				{
-					std::memset(convert_pointer<void *>(iterator1.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
+					std::memset(static_cast<void *>(std::to_address(iterator1.skipfield_pointer) + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
 				}
 
 				iterator1.group_pointer->size = static_cast<skipfield_type>(iterator1.group_pointer->size - number_of_group_erasures);
@@ -2373,7 +2373,7 @@ public:
 
 				if (distance_to_iterator2 > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active() will work
 				{
-					std::memset(convert_pointer<void *>(current_saved.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_iterator2 - 2));
+					std::memset(static_cast<void *>(std::to_address(current_saved.skipfield_pointer) + 1), 1, sizeof(skipfield_type) * (distance_to_iterator2 - 2));
 				}
 
 				if (iterator1.element_pointer == begin_iterator.element_pointer)
@@ -2704,6 +2704,38 @@ public:
 	static constexpr hive_limits block_capacity_hard_limits() noexcept
 	{
 		return hive_limits(3, std::numeric_limits<skipfield_type>::max());
+	}
+
+
+
+	static constexpr size_type max_block_capacity_per_allocation(const size_type allocation_amount) noexcept
+	{
+		// Get a rough approximation of the number of elements + skipfield units we can fit in the amount expressed:
+		size_type num_units = allocation_amount / (sizeof(aligned_element_struct) + sizeof(skipfield_type));
+
+		// Truncate the amount to the implementation's hard block capacity max limit:
+		if (num_units > std::numeric_limits<skipfield_type>::max())
+		{
+			num_units = std::numeric_limits<skipfield_type>::max();
+		}
+
+		// Adjust num_units downward based on (a) the additional skipfield node necessary per-block in this implementation and
+		// (b) any additional memory waste required in order to allocate the skipfield in multiples of the element type's alignof:
+		if ((	/* Explanation: elements and skipfield are allocated in a single allocation to save performance.
+				In order for the elements to be correctly aligned in memory, this single allocation is aligned to the alignof
+				the element type, so the first line below is the allocation amount in bytes required for the skipfield
+				when allocated in multiples of the element type's alignof. The + sizeof(skipfield_type) adds the additional skipfield node
+				as mentioned, and the (num_units + 1) minus 1 byte rounds up the integer division: */
+			((((num_units + 1) * sizeof(aligned_allocation_struct)) - 1 + sizeof(skipfield_type)) / sizeof(aligned_allocation_struct))
+				/* the second line is the amount of memory in bytes necessary for the elements themselves: */
+			+ (num_units * sizeof(aligned_element_struct)))
+				/* then we compare against the desired allocation amount: */
+			> allocation_amount)
+		{
+			--num_units; // In this implementation it is not possible for the necessary adjustment to be greater than 1 element+skipfield sizeof
+		}
+
+		return num_units;
 	}
 
 
