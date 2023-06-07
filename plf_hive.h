@@ -49,7 +49,6 @@
 #include <initializer_list>
 #include <concepts>
 #include <compare> // std::strong_ordering, std::to_address
-#include <bit> // std::bit_cast
 #include <ranges>
 
 
@@ -189,9 +188,9 @@ private:
 	template <class destination_pointer_type, class source_pointer_type>
 	static constexpr destination_pointer_type convert_pointer(const source_pointer_type source_pointer) noexcept
 	{
-		if constexpr (std::is_trivial<destination_pointer_type>::value && std::is_trivial<source_pointer_type>::value)
+		if constexpr (std::is_trivial<destination_pointer_type>::value)
 		{
-			return reinterpret_cast<destination_pointer_type>(source_pointer);
+			return reinterpret_cast<destination_pointer_type>(std::to_address(source_pointer));
 		}
 		else
 		{
