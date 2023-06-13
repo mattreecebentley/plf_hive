@@ -935,15 +935,17 @@ public:
 				{
 					const iterator return_iterator = end_iterator; // Make copy for return before modifying end_iterator
 
-					if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
-					{ // For no good reason this compiles to much faster code under GCC in raw small struct tests:
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+						{
+							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
+							end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer); // Shift the addition to the second operation, avoiding a try-catch block if an exception is thrown during construction
+						}
+						else
+					#endif
+					{ // For no good reason this compiles to much faster code under GCC in raw small struct tests - don't need to avoid try-catch here, so can keep the ++ in the first line:
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), element);
 						end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
-					}
-					else
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
-						end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer); // Shift the addition to the second operation, avoiding a try-catch block if an exception is thrown during construction
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -961,13 +963,9 @@ public:
 					reset_group_numbers_if_necessary();
 					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
 
-					if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), element);
-					}
-					else
-					{
-						#ifdef PLF_EXCEPTIONS_SUPPORT
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+						{
 							try
 							{
 								std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), element);
@@ -977,9 +975,11 @@ public:
 								deallocate_group(next_group);
 								throw;
 							}
-						#else
-							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), element);
-						#endif
+						}
+						else
+					#endif
+					{
+						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), element);
 					}
 
 					total_capacity += new_group_size;
@@ -1014,13 +1014,9 @@ public:
 		{
 			initialize(min_block_capacity);
 
-			if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
-			{
-				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), element);
-			}
-			else
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+				{
 					try
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), element);
@@ -1030,9 +1026,11 @@ public:
 						reset();
 						throw;
 					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), element);
-				#endif
+				}
+				else
+			#endif
+			{
+				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), element);
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1053,15 +1051,17 @@ public:
 				{
 					const iterator return_iterator = end_iterator;
 
-					if constexpr (std::is_nothrow_move_constructible<element_type>::value)
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
+						{
+							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), std::move(element));
+							end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer);
+						}
+						else
+					#endif
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::move(element));
 						end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
-					}
-					else
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), std::move(element));
-						end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer);
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -1079,13 +1079,9 @@ public:
 					reset_group_numbers_if_necessary();
 					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
 
-					if constexpr (std::is_nothrow_move_constructible<element_type>::value)
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::move(element));
-					}
-					else
-					{
-						#ifdef PLF_EXCEPTIONS_SUPPORT
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
+						{
 							try
 							{
 								std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::move(element));
@@ -1095,9 +1091,11 @@ public:
 								deallocate_group(next_group);
 								throw;
 							}
-						#else
-							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::move(element));
-						#endif
+						}
+						else
+					#endif
+					{
+						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::move(element));
 					}
 
 					total_capacity += new_group_size;
@@ -1131,13 +1129,9 @@ public:
 		{
 			initialize(min_block_capacity);
 
-			if constexpr (std::is_nothrow_move_constructible<element_type>::value)
-			{
-				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::move(element));
-			}
-			else
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
+				{
 					try
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::move(element));
@@ -1147,9 +1141,11 @@ public:
 						reset();
 						throw;
 					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::move(element));
-				#endif
+				}
+				else
+			#endif
+			{
+				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::move(element));
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1171,15 +1167,17 @@ public:
 				{
 					const iterator return_iterator = end_iterator;
 
-					if constexpr (std::is_nothrow_constructible<element_type>::value)
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_constructible<element_type>::value)
+						{
+							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), std::forward<arguments>(parameters) ...);
+							end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer);
+						}
+						else
+					#endif
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
 						end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
-					}
-					else
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), std::forward<arguments>(parameters) ...);
-						end_iterator.group_pointer->last_endpoint = ++(end_iterator.element_pointer);
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -1197,13 +1195,9 @@ public:
 					reset_group_numbers_if_necessary();
 					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
 
-					if constexpr (std::is_nothrow_constructible<element_type>::value)
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
-					}
-					else
-					{
-						#ifdef PLF_EXCEPTIONS_SUPPORT
+					#ifdef PLF_EXCEPTIONS_SUPPORT
+						if constexpr (!std::is_nothrow_constructible<element_type>::value)
+						{
 							try
 							{
 								std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
@@ -1213,9 +1207,11 @@ public:
 								deallocate_group(next_group);
 								throw;
 							}
-						#else
-							std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
-						#endif
+						}
+						else
+					#endif
+					{
+						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
 					}
 
 					total_capacity += new_group_size;
@@ -1249,13 +1245,9 @@ public:
 		{
 			initialize(min_block_capacity);
 
-			if constexpr (std::is_nothrow_constructible<element_type, arguments ...>::value)
-			{
-				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
-			}
-			else
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				if constexpr (!std::is_nothrow_constructible<element_type>::value)
+				{
 					try
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
@@ -1265,9 +1257,11 @@ public:
 						reset();
 						throw;
 					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
-				#endif
+				}
+				else
+			#endif
+			{
+				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1283,23 +1277,44 @@ private:
 	// For catch blocks in fill() and range_fill()
 	void recover_from_partial_fill()
 	{
-		if constexpr (!(std::is_nothrow_copy_constructible<element_type>::value && std::is_nothrow_constructible<element_type>::value)) // to avoid unnecessary codegen, since this function will never be called if this line is true
-		{
-			end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
-			const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(end_iterator.element_pointer - end_iterator.group_pointer->elements);
-			end_iterator.group_pointer->size = elements_constructed_before_exception;
-			end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + elements_constructed_before_exception;
-			total_size += elements_constructed_before_exception;
-			unused_groups_head = end_iterator.group_pointer->next_group;
-			end_iterator.group_pointer->next_group = nullptr;
-		}
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen, since this function will never be called if this line is true
+			{
+				end_iterator.group_pointer->last_endpoint = end_iterator.element_pointer;
+				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(end_iterator.element_pointer - end_iterator.group_pointer->elements);
+				end_iterator.group_pointer->size = elements_constructed_before_exception;
+				end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + elements_constructed_before_exception;
+				total_size += elements_constructed_before_exception;
+				unused_groups_head = end_iterator.group_pointer->next_group;
+				end_iterator.group_pointer->next_group = nullptr;
+			}
+		#endif
 	}
 
 
 
 	void fill(const element_type &element, const skipfield_type size)
 	{
-		if constexpr (std::is_nothrow_copy_constructible<element_type>::value && std::is_nothrow_constructible<element_type>::value)
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+			{
+				const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
+
+				do
+				{
+					try
+					{
+						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
+					}
+					catch (...)
+					{
+						recover_from_partial_fill();
+						throw;
+					}
+				} while (++end_iterator.element_pointer != fill_end);
+			}
+			else
+		#endif
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
 			{
@@ -1315,7 +1330,7 @@ private:
 
 				end_iterator.element_pointer += size;
 			}
-			else // If at least nothrow_constructible, can remove the large block of 'catch' code below
+			else // If at least nothrow_constructible (or exceptions disabled), can remove the large block of 'catch' code above
 			{
 				const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
 
@@ -1324,27 +1339,6 @@ private:
 					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
 				} while (++end_iterator.element_pointer != fill_end);
 			}
-		}
-		else
-		{
-			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
-
-			do
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
-					try
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
-					}
-					catch (...)
-					{
-						recover_from_partial_fill();
-						throw;
-					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), element);
-				#endif
-			} while (++end_iterator.element_pointer != fill_end);
 		}
 
 		total_size += size;
@@ -1355,32 +1349,54 @@ private:
 	// For catch blocks in range_fill_skipblock and fill_skipblock
 	void recover_from_partial_skipblock_fill(aligned_pointer_type const location, const aligned_pointer_type current_location, skipfield_pointer_type const skipfield_pointer, const skipfield_type prev_free_list_node)
 	{
-		if constexpr (!(std::is_nothrow_copy_constructible<element_type>::value && std::is_nothrow_constructible<element_type>::value)) // to avoid unnecessary codegen
-		{
-			// Reconstruct existing skipblock and free-list indexes to reflect partially-reused skipblock:
-			const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(current_location - location);
-			erasure_groups_head->size = static_cast<skipfield_type>(erasure_groups_head->size + elements_constructed_before_exception);
-			total_size += elements_constructed_before_exception;
-
-			std::memset(skipfield_pointer, 0, elements_constructed_before_exception * sizeof(skipfield_type));
-
-			edit_free_list_head(location + elements_constructed_before_exception, prev_free_list_node);
-
-			const skipfield_type new_skipblock_head_index = static_cast<skipfield_type>((location - erasure_groups_head->elements) + elements_constructed_before_exception);
-			erasure_groups_head->free_list_head = new_skipblock_head_index;
-
-			if (prev_free_list_node != std::numeric_limits<skipfield_type>::max())
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen
 			{
-				edit_free_list_next(erasure_groups_head->elements + prev_free_list_node, new_skipblock_head_index);
+				// Reconstruct existing skipblock and free-list indexes to reflect partially-reused skipblock:
+				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(current_location - location);
+				erasure_groups_head->size = static_cast<skipfield_type>(erasure_groups_head->size + elements_constructed_before_exception);
+				total_size += elements_constructed_before_exception;
+
+				std::memset(skipfield_pointer, 0, elements_constructed_before_exception * sizeof(skipfield_type));
+
+				edit_free_list_head(location + elements_constructed_before_exception, prev_free_list_node);
+
+				const skipfield_type new_skipblock_head_index = static_cast<skipfield_type>((location - erasure_groups_head->elements) + elements_constructed_before_exception);
+				erasure_groups_head->free_list_head = new_skipblock_head_index;
+
+				if (prev_free_list_node != std::numeric_limits<skipfield_type>::max())
+				{
+					edit_free_list_next(erasure_groups_head->elements + prev_free_list_node, new_skipblock_head_index);
+				}
 			}
-		}
+		#endif
 	}
 
 
 
 	void fill_skipblock(const element_type &element, aligned_pointer_type const location, skipfield_pointer_type const skipfield_pointer, const skipfield_type size)
 	{
-		if constexpr (std::is_nothrow_copy_constructible<element_type>::value && std::is_nothrow_constructible<element_type>::value)
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+			{
+				const aligned_pointer_type fill_end = location + size;
+				const skipfield_type prev_free_list_node = *convert_pointer<skipfield_pointer_type>(location); // in case of exception, grabbing indexes before free_list node is reused
+
+				for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+				{
+					try
+					{
+						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), element);
+					}
+					catch (...)
+					{
+						recover_from_partial_skipblock_fill(location, current_location, skipfield_pointer, prev_free_list_node);
+						throw;
+					}
+				}
+			}
+			else
+		#endif
 		{
 			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
 			{
@@ -1402,30 +1418,6 @@ private:
 				{
 					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), element);
 				}
-			}
-		}
-		else
-		{
-			const aligned_pointer_type fill_end = location + size;
-			#ifdef PLF_EXCEPTIONS_SUPPORT
-				const skipfield_type prev_free_list_node = *convert_pointer<skipfield_pointer_type>(location); // in case of exception, grabbing indexes before free_list node is reused
-			#endif
-
-			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
-					try
-					{
-						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), element);
-					}
-					catch (...)
-					{
-						recover_from_partial_skipblock_fill(location, current_location, skipfield_pointer, prev_free_list_node);
-						throw;
-					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), element);
-				#endif
 			}
 		}
 
@@ -1579,22 +1571,13 @@ private:
 	template <class iterator_type>
 	iterator_type range_fill(iterator_type it, const skipfield_type size)
 	{
-		if constexpr (std::is_nothrow_constructible<element_type>::value && std::is_nothrow_copy_constructible<element_type>::value)
-		{
-			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
-
-			do
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
 			{
-				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), *it++);
-			} while (++end_iterator.element_pointer != fill_end);
-		}
-		else
-		{
-			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
+				const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
 
-			do
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
+				do
+				{
 					try
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), *it++);
@@ -1604,9 +1587,16 @@ private:
 						recover_from_partial_fill();
 						throw;
 					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), *it++);
-				#endif
+				} while (++end_iterator.element_pointer != fill_end);
+			}
+			else
+		#endif
+		{
+			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
+
+			do
+			{
+				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(end_iterator.element_pointer), *it++);
 			} while (++end_iterator.element_pointer != fill_end);
 		}
 
@@ -1621,20 +1611,13 @@ private:
 	{
 		const aligned_pointer_type fill_end = location + size;
 
-		if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
-		{
-			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
 			{
-				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), *it++);
-			}
-		}
-		else
-		{
-			const skipfield_type prev_free_list_node = *convert_pointer<skipfield_pointer_type>(location); // in case of exception, grabbing indexes before free_list node is reused
+				const skipfield_type prev_free_list_node = *convert_pointer<skipfield_pointer_type>(location); // in case of exception, grabbing indexes before free_list node is reused
 
-			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
-			{
-				#ifdef PLF_EXCEPTIONS_SUPPORT
+				for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+				{
 					try
 					{
 						std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), *it++);
@@ -1644,9 +1627,14 @@ private:
 						recover_from_partial_skipblock_fill(location, current_location, skipfield_pointer, prev_free_list_node);
 						throw;
 					}
-				#else
-					std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), *it++);
-				#endif
+				}
+			}
+			else
+		#endif
+		{
+			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+			{
+				std::allocator_traits<allocator_type>::construct(*this, convert_pointer<pointer>(current_location), *it++);
 			}
 		}
 
@@ -2605,16 +2593,18 @@ private:
 	// get all elements contiguous in memory and shrink to fit, remove erasures and erasure free lists. Invalidates all iterators and pointers to elements.
 	void consolidate()
 	{
-		if constexpr (std::is_nothrow_move_constructible<element_type>::value && std::is_nothrow_move_assignable<element_type>::value)
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr (!(std::is_nothrow_move_constructible<element_type>::value && std::is_nothrow_move_assignable<element_type>::value))
+			{
+				hive temp(*this);
+				swap(temp);
+			}
+			else
+		#endif
 		{
 			hive temp(hive_limits(min_block_capacity, max_block_capacity));
 			temp.range_assign(std::make_move_iterator(begin_iterator), total_size);
 			*this = std::move(temp); // Avoid generating 2nd temporary
-		}
-		else
-		{
-			hive temp(*this);
-			swap(temp);
 		}
 	}
 
@@ -3442,12 +3432,10 @@ public:
 					current = erase(current);
 				}
 
-				if (last == end)
+				if (last == end) // Have to check here because if back block has been fully erased, cend() will have changed and 'end' is invalidated (but still valid in terms of a comparison with last)
 				{
 					break;
 				}
-
-				end = cend(); // cend() might've shifted due to a block becoming empty and subsequently being removed from the iterative sequence
 			}
 		}
 
@@ -4763,8 +4751,8 @@ namespace std
 					current = container.erase(current);
 				}
 
-				if (current == container.cend()) // we want ++ to occur as we already know current doesn't satisfy the predicate, but if that happens we may skip over cend
-				{ // ps. this is the only situation where the const end above might've been invalidated
+				if (last == end) // same logic as unique() member function
+				{
 					break;
 				}
 			}
