@@ -183,7 +183,7 @@ int main()
 					}
 				}
 
-				int d_size = d_hive.size();
+				int d_size = static_cast<int>(d_hive.size());
 
 				for (int counter = 0; counter != 10000; ++counter)
 				{
@@ -193,7 +193,7 @@ int main()
 					last = first;
 					std::advance(last, dist2);
 
-					const int dist = std::distance(first, last);
+					const int dist = static_cast<int>(std::distance(first, last));
 
 					if (dist != dist2)
 					{
@@ -218,7 +218,7 @@ int main()
 					}
 				}
 
-				d_size = d_hive.size();
+				d_size = static_cast<int>(d_hive.size());
 
 				for (int counter = 0; counter != 10000; ++counter)
 				{
@@ -227,7 +227,7 @@ int main()
 					std::advance(first, dist1);
 					std::advance(last, dist2);
 
-					const int dist = std::distance(first, last);
+					const int dist = static_cast<int>(std::distance(first, last));
 
 					if (dist != dist2 - dist1)
 					{
@@ -1236,7 +1236,7 @@ int main()
 
  			failpass("Range insertion with differing iterators test", i_hive2.size() == 501003);
 
- 			i_hive3.insert(std::move(i_hive2.begin()), std::move(i_hive2.cend()));
+ 			i_hive3.insert(std::make_move_iterator(i_hive2.begin()), std::make_move_iterator(i_hive2.cend()));
 
  			failpass("Range move-insertion test", i_hive3.size() == 506003);
 
