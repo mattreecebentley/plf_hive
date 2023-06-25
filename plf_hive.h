@@ -3410,18 +3410,20 @@ public:
 
 		size_type count = 0;
 
-		for(const_iterator current = ++const_iterator(begin_iterator), end = cend(), previous = begin_iterator; current != end; previous = current++)
+		for(const_iterator current = ++const_iterator(begin_iterator), previous = begin_iterator; current != end_iterator;)
 		{
 			if (compare(*current, *previous))
 			{
 				const size_type original_count = ++count;
 				const_iterator last(++const_iterator(current));
 
-				while(last != end && compare(*last, *previous))
+				while(last != end_iterator && compare(*last, *previous))
 				{
 					++last;
 					++count;
 				}
+
+				previous = current;
 
 				if (count != original_count)
 				{
@@ -3431,11 +3433,10 @@ public:
 				{
 					current = erase(current);
 				}
-
-				if (last == end) // Have to check here because if back block has been fully erased, cend() will have changed and 'end' is invalidated (but still valid in terms of a comparison with last)
-				{
-					break;
-				}
+			}
+			else
+			{
+				previous = current++;
 			}
 		}
 
@@ -4727,14 +4728,13 @@ namespace std
 		typedef typename hive::size_type 		size_type;
 		size_type count = 0;
 
-		const const_iterator end = container.cend();
-
-		for(const_iterator current = container.cbegin(); current != end; ++current)
+		for (const_iterator current = container.cbegin(); current != container.cend(); )
 		{
 			if (predicate(*current))
 			{
 				const size_type original_count = ++count;
 				const_iterator last(++const_iterator(current));
+				const const_iterator end = container.cend();
 
 				while(last != end && predicate(*last))
 				{
@@ -4750,11 +4750,10 @@ namespace std
 				{
 					current = container.erase(current);
 				}
-
-				if (last == end) // same logic as unique() member function
-				{
-					break;
-				}
+			}
+			else
+			{
+				++current;
 			}
 		}
 
