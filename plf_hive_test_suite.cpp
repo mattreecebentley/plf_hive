@@ -434,7 +434,6 @@ int main()
 			failpass("Swap test 2", p_hive3.size() == p_hive2.size() - 1);
 
 			failpass("max_size() test", p_hive2.max_size() > p_hive2.size());
-
 		}
 
 
@@ -944,6 +943,8 @@ int main()
 					std::advance(it1, static_cast<int>(range1));
 					std::advance(it2, static_cast<int>(range2));
 
+					if (it2 > i_hive.end()) it2 = i_hive.end();
+
 					i_hive.erase(it1, it2);
 
 					counter = 0;
@@ -990,6 +991,8 @@ int main()
 					range2 = range1 + 1 + (rand() % (size - range1));
 					std::advance(it1, static_cast<int>(range1));
 					std::advance(it2, static_cast<int>(range2));
+
+					if (it2 > i_hive.end()) it2 = i_hive.end();
 
 					i_hive.erase(it1, it2);
 
@@ -1098,6 +1101,8 @@ int main()
 					range2 = range1 + 1 + (rand() % (size - range1));
 					std::advance(ss_it1, static_cast<int>(range1));
 					std::advance(ss_it2, static_cast<int>(range2));
+
+					if (ss_it2 > ss_nt.end()) ss_it2 = ss_nt.end();
 
 					ss_nt.erase(ss_it1, ss_it2);
 
