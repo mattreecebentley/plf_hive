@@ -3359,44 +3359,81 @@ public:
 			return;
 		}
 
-		tuple_pointer_type const sort_array = std::allocator_traits<tuple_allocator_type>::allocate(tuple_allocator, total_size, nullptr);
-		tuple_pointer_type tuple_pointer = sort_array;
-
-		// Construct pointers to all elements in the sequence:
-		size_type index = 0;
-
-		for (iterator current_element = begin_iterator; current_element != end_iterator; ++current_element, ++tuple_pointer, ++index)
+		if constexpr ((std::is_trivially_copyable<element_type>::value || std::is_move_assignable<element_type>::value) && sizeof(element_type) <= sizeof(element_type *) * 2) // If element is <= 2 pointers, just copy to an array and sort that then copy back - consumes less memory and may be faster
 		{
-			std::allocator_traits<tuple_allocator_type>::construct(tuple_allocator, tuple_pointer, &*current_element, index);
-		}
+			element_type * const sort_array = std::allocator_traits<allocator_type>::allocate(*this, total_size, nullptr), * const end = sort_array + total_size;
 
-		// Now, sort the pointers by the values they point to:
-		std::sort(sort_array, tuple_pointer, sort_dereferencer<comparison_function>(compare));
-
-		// Sort the actual elements via the tuple array:
-		index = 0;
-
-		for (tuple_pointer_type current_tuple = sort_array; current_tuple != tuple_pointer; ++current_tuple, ++index)
-		{
-			if (current_tuple->original_index != index)
+			if constexpr (!std::is_trivially_copyable<element_type>::value && std::is_move_assignable<element_type>::value)
 			{
-				element_type end_value = std::move(*(current_tuple->original_location));
-				size_type destination_index = index;
-				size_type source_index = current_tuple->original_index;
-
-				do
-				{
-					*(sort_array[destination_index].original_location) = std::move(*(sort_array[source_index].original_location));
-					destination_index = source_index;
-					source_index = sort_array[destination_index].original_index;
-					sort_array[destination_index].original_index = destination_index;
-				} while (source_index != index);
-
-				*(sort_array[destination_index].original_location) = std::move(end_value);
+				std::uninitialized_copy(std::make_move_iterator(begin_iterator), std::make_move_iterator(end_iterator), sort_array);
 			}
-		}
+			else
+			{
+				std::uninitialized_copy(begin_iterator, end_iterator, sort_array);
+			}
+			
+			std::sort(sort_array, end, compare);
 
-		std::allocator_traits<tuple_allocator_type>::deallocate(tuple_allocator, sort_array, total_size);
+			if constexpr (!std::is_trivially_copyable<element_type>::value && std::is_move_assignable<element_type>::value)
+			{
+				std::copy(std::make_move_iterator(sort_array), std::make_move_iterator(end), begin_iterator);
+			}
+			else
+			{
+				std::copy(sort_array, end, begin_iterator);
+
+				if (!std::is_trivially_destructible<element_type>::value)
+				{
+					for (element_type *current = sort_array; current != end; ++current)
+					{
+						std::allocator_traits<allocator_type>::destroy(*this, current);
+					}
+				}
+			}
+			
+			std::allocator_traits<allocator_type>::deallocate(*this, sort_array, total_size);
+		}
+ 		else
+		{
+			tuple_pointer_type const sort_array = std::allocator_traits<tuple_allocator_type>::allocate(tuple_allocator, total_size, nullptr);
+			tuple_pointer_type tuple_pointer = sort_array;
+
+			// Construct pointers to all elements in the sequence:
+			size_type index = 0;
+
+			for (iterator current_element = begin_iterator; current_element != end_iterator; ++current_element, ++tuple_pointer, ++index)
+			{
+				std::allocator_traits<tuple_allocator_type>::construct(tuple_allocator, tuple_pointer, &*current_element, index);
+			}
+
+			// Now, sort the pointers by the values they point to:
+			std::sort(sort_array, tuple_pointer, sort_dereferencer<comparison_function>(compare));
+
+			// Sort the actual elements via the tuple array:
+			index = 0;
+
+			for (tuple_pointer_type current_tuple = sort_array; current_tuple != tuple_pointer; ++current_tuple, ++index)
+			{
+				if (current_tuple->original_index != index)
+				{
+					element_type end_value = std::move(*(current_tuple->original_location));
+					size_type destination_index = index;
+					size_type source_index = current_tuple->original_index;
+
+					do
+					{
+						*(sort_array[destination_index].original_location) = std::move(*(sort_array[source_index].original_location));
+						destination_index = source_index;
+						source_index = sort_array[destination_index].original_index;
+						sort_array[destination_index].original_index = destination_index;
+					} while (source_index != index);
+
+					*(sort_array[destination_index].original_location) = std::move(end_value);
+				}
+			}
+
+			std::allocator_traits<tuple_allocator_type>::deallocate(tuple_allocator, sort_array, total_size);
+		}
 	}
 
 
