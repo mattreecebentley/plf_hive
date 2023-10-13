@@ -1285,7 +1285,7 @@ private:
 	void recover_from_partial_fill()
 	{
 		#ifdef PLF_EXCEPTIONS_SUPPORT
-			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen, since this function will never be called if this line is true
+			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen, since this function will never be called if this line isn't true
 			{
 				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(end_iterator.element_pointer - end_iterator.group_pointer->elements);
 				end_iterator.group_pointer->size = elements_constructed_before_exception;
@@ -1321,30 +1321,28 @@ private:
 			}
 			else
 		#endif
+		if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
 		{
-			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value) // ie. we can get away with using the cheaper fill_n here if there is no chance of an exception being thrown:
+			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
-				{
-					alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
-					std::fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
-				}
-				else
-				{
-					std::fill_n(pointer_cast<pointer>(end_iterator.element_pointer), size, element);
-				}
-
-				end_iterator.element_pointer += size;
+				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
+				std::fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
 			}
-			else // If at least nothrow_constructible (or exceptions disabled), can remove the large block of 'catch' code above
+			else
 			{
-				const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
-
-				do
-				{
-					std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), element);
-				} while (++end_iterator.element_pointer != fill_end);
+				std::fill_n(pointer_cast<pointer>(end_iterator.element_pointer), size, element);
 			}
+
+			end_iterator.element_pointer += size;
+		}
+		else // If at least nothrow_constructible (or exceptions disabled), can remove the large block of 'catch' code above
+		{
+			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
+
+			do
+			{
+				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), element);
+			} while (++end_iterator.element_pointer != fill_end);
 		}
 
 		total_size += size;
@@ -1356,7 +1354,7 @@ private:
 	void recover_from_partial_skipblock_fill(aligned_pointer_type const location, const aligned_pointer_type current_location, skipfield_pointer_type const skipfield_pointer, const skipfield_type prev_free_list_node)
 	{
 		#ifdef PLF_EXCEPTIONS_SUPPORT
-			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen
+			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen
 			{
 				// Reconstruct existing skipblock and free-list indexes to reflect partially-reused skipblock:
 				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(current_location - location);
@@ -1403,27 +1401,25 @@ private:
 			}
 			else
 		#endif
+		if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
 		{
-			if constexpr (std::is_trivially_copyable<element_type>::value && std::is_trivially_copy_constructible<element_type>::value)
+			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
-				{
-					alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
-					std::fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
-				}
-				else
-				{
-					std::fill_n(pointer_cast<pointer>(location), size, element);
-				}
+				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
+				std::fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
 			}
 			else
 			{
-				const aligned_pointer_type fill_end = location + size;
+				std::fill_n(pointer_cast<pointer>(location), size, element);
+			}
+		}
+		else
+		{
+			const aligned_pointer_type fill_end = location + size;
 
-				for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
-				{
-					std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), element);
-				}
+			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+			{
+				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), element);
 			}
 		}
 
@@ -1576,16 +1572,23 @@ private:
 	template <class iterator_type>
 	iterator_type range_fill(iterator_type it, const skipfield_type size)
 	{
-		#ifdef PLF_EXCEPTIONS_SUPPORT
-			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
-			{
-				const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
+		const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
 
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value)
+			{
 				do
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), *it++);
+						if constexpr (std::is_copy_constructible<element_type>::value)
+						{
+							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::move(*it++));
+						}
+						else
+						{
+							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), *it++);
+						}
 					}
 					catch (...)
 					{
@@ -1596,12 +1599,18 @@ private:
 			}
 			else
 		#endif
+		if constexpr (std::is_copy_constructible<element_type>::value)
 		{
-			const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
-
 			do
 			{
 				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), *it++);
+			} while (++end_iterator.element_pointer != fill_end);
+		}
+		else // assumes moveable-but-not-copyable type
+		{
+			do
+			{
+				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::move(*it++));
 			} while (++end_iterator.element_pointer != fill_end);
 		}
 
@@ -1617,7 +1626,7 @@ private:
 		const aligned_pointer_type fill_end = location + size;
 
 		#ifdef PLF_EXCEPTIONS_SUPPORT
-			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
+			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value)
 			{
 				const skipfield_type prev_free_list_node = *pointer_cast<skipfield_pointer_type>(location); // in case of exception, grabbing indexes before free_list node is reused
 
@@ -1625,7 +1634,14 @@ private:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), *it++);
+						if constexpr (std::is_copy_constructible<element_type>::value)
+						{
+							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), std::move(*it++));
+						}
+						else
+						{
+							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), *it++);
+						}
 					}
 					catch (...)
 					{
@@ -1636,10 +1652,18 @@ private:
 			}
 			else
 		#endif
+		if constexpr (std::is_copy_constructible<element_type>::value)
 		{
 			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 			{
 				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), *it++);
+			}
+		}
+		else // assumes moveable-but-not-copyable type
+		{
+			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
+			{
+				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), std::move(*it++));
 			}
 		}
 
