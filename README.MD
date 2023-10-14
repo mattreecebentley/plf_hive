@@ -17,4 +17,4 @@ Note: In terms of the Microsoft compiler, hive requires Visual Studio 2022 or la
 Note2: Use plf::ranges::range_from in the parameters when calling rangesv3 constructor overloads. This will be updated with std::ranges::range_from when that feature becomes widely available in C++23-compliant compilers.
 
 
-![Infographic describing the container](https://i.imgur.com/I1eSDQA.png)
+![Infographic describing the container](https://i.imgur.com/eXSlOdi.png)
