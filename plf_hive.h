@@ -42,7 +42,7 @@
 #include <limits>  // std::numeric_limits
 #include <memory> // std::allocator, std::to_address
 #include <iterator> // std::bidirectional_iterator_tag, iterator_traits, make_move_iterator, std::distance for range insert
-#include <stdexcept> // std::length_error
+#include <stdexcept> // std::length_error, std::out_of_range
 #include <functional> // std::less
 #include <cstddef> // offsetof, used in blank()
 #include <type_traits> // std::is_trivially_destructible, enable_if_t, type_identity_t, etc
@@ -315,7 +315,7 @@ private:
 		if (capacities.min < hard_capacities.min || capacities.min > capacities.max || capacities.max > hard_capacities.max)
 		{
 			#ifdef PLF_EXCEPTIONS_SUPPORT
-				throw std::length_error("Supplied memory block capacity limits are either invalid or outside of block_capacity_hard_limits()");
+				throw std::out_of_range("Supplied memory block capacity limits are either invalid or outside of block_capacity_hard_limits()");
 			#else
 				std::terminate();
 			#endif
@@ -2657,7 +2657,7 @@ public:
 			{
 				if constexpr (!(std::is_copy_constructible<element_type>::value || std::is_move_constructible<element_type>::value))
 				{
-					throw std::length_error("Current hive's block capacities do not fit within the supplied block limits, therefore reallocation of elements must occur, however user is using a non-copy-constructible/non-move-constructible type.");
+					throw std::out_of_range("Current hive's block capacities do not fit within the supplied block limits, therefore reallocation of elements must occur, however user is using a non-copy-constructible/non-move-constructible type.");
 				}
 				else
 				{
@@ -3161,7 +3161,7 @@ public:
 				if (current_group->capacity < min_block_capacity || current_group->capacity > max_block_capacity)
 				{
 					#ifdef PLF_EXCEPTIONS_SUPPORT
-						throw std::length_error("A source memory block capacity is outside of the destination's minimum or maximum memory block capacity limits - please change either the source or the destination's min/max block capacity limits using reshape() before calling splice() in this case");
+						throw std::out_of_range("A source memory block capacity is outside of the destination's minimum or maximum memory block capacity limits - please change either the source or the destination's min/max block capacity limits using reshape() before calling splice() in this case");
 					#else
 						std::terminate();
 					#endif
@@ -3170,10 +3170,6 @@ public:
 		}
 
 		// Preserve original unused_groups so that both source and destination retain theirs in case of swap or std::move below:
-		group_pointer_type const source_unused_groups = source.unused_groups_head, unused_groups_head_original = unused_groups_head;
-		source.unused_groups_head = nullptr;
-		unused_groups_head = nullptr;
-
 		if (total_size != 0)
 		{
 			// If there's more unused element locations in back memory block of destination than in back memory block of source, swap with source to reduce number of skipped elements during iteration:
@@ -3289,28 +3285,37 @@ public:
 		}
 		else // If *this is empty():
 		{
-			*this = std::move(source);
+			// Preserve unused_groups_head and de-link so that destroy_all_data doesn't remove them:
+			const group_pointer_type original_unused_groups = unused_groups_head;
+			unused_groups_head = nullptr;
+			destroy_all_data();
 
-			// Add capacity for unused_groups back into *this:
-			for (group_pointer_type current = unused_groups_head_original; current != nullptr; current = current->next_group)
+			// Move source data to *this:
+			end_iterator = source.end_iterator;
+			begin_iterator = source.begin_iterator;
+			erasure_groups_head = source.erasure_groups_head;
+			total_size = source.total_size;
+			total_capacity = source.total_capacity;
+
+			// Restore unused_groups_head and add capacity for unused groups back into *this:
+			unused_groups_head = original_unused_groups;
+			for (group_pointer_type current = original_unused_groups; current != nullptr; current = current->next_group)
 			{
 				total_capacity += current->capacity;
 			}
 		}
 
 
-		// Re-link original unused_groups to *this (in case of swap):
-		unused_groups_head = unused_groups_head_original;
-
 		// Reset source values:
+		const group_pointer_type source_unused_groups_head = source.unused_groups_head;
 		source.blank();
 
-		if (source_unused_groups != nullptr) // If there were unused_groups in source, re-link them and remove their capacity count from *this:
+		if (source_unused_groups_head != nullptr) // If there were unused_groups in source, re-link them and remove their capacity count from *this:
 		{
 			size_type source_unused_groups_capacity = 0;
 
 			// Count capacity in source unused_groups:
-			for (group_pointer_type current = source_unused_groups; current != nullptr; current = current->next_group)
+			for (group_pointer_type current = source_unused_groups_head; current != nullptr; current = current->next_group)
 			{
 				source_unused_groups_capacity += current->capacity;
 			}
@@ -3319,12 +3324,12 @@ public:
 			source.total_capacity = source_unused_groups_capacity;
 
 			// Establish first group from source unused_groups as first active group in source, link rest as reserved groups:
-			source.unused_groups_head = source_unused_groups->next_group;
-			source.begin_iterator.group_pointer = source_unused_groups;
-			source.begin_iterator.element_pointer = source_unused_groups->elements;
-			source.begin_iterator.skipfield_pointer = source_unused_groups->skipfield;
+			source.unused_groups_head = source_unused_groups_head->next_group;
+			source.begin_iterator.group_pointer = source_unused_groups_head;
+			source.begin_iterator.element_pointer = source_unused_groups_head->elements;
+			source.begin_iterator.skipfield_pointer = source_unused_groups_head->skipfield;
 			source.end_iterator = source.begin_iterator;
-			source_unused_groups->reset(0, nullptr, nullptr, 0);
+			source.unused_groups_head->reset(0, nullptr, nullptr, 0);
 		}
 	}
 
@@ -4133,7 +4138,6 @@ public:
 		{
 			// Code logic:
 			// If iterators are the same, return 0
-			// Otherwise, find which iterator is later in hive, copy that to iterator2. Copy the lower to iterator1.
 			// If they are not pointing to elements in the same group, process the intermediate groups and add distances,
 			// skipping manual incrementation in all but the initial and final groups.
 			// In the initial and final groups, manual incrementation must be used to calculate distance, if there have been no prior erasures in those groups.
@@ -4148,13 +4152,6 @@ public:
 
 			difference_type distance = 0;
 			hive_iterator iterator1 = *this, iterator2 = last;
-			const bool swap = iterator1 > iterator2;
-
-			if (swap)
-			{
-				iterator1 = last;
-				iterator2 = *this;
-			}
 
 			if (iterator1.group_pointer != iterator2.group_pointer) // if not in same group, process intermediate groups
 			{
@@ -4206,12 +4203,6 @@ public:
 					iterator1.skipfield_pointer += *++iterator1.skipfield_pointer;
 					++distance;
 				}
-			}
-
-
-			if (swap)
-			{
-				distance = -distance;
 			}
 
 			return distance;
