@@ -2208,7 +2208,7 @@ public:
 					*(iterator1.skipfield_pointer - previous_node_value) = *(iterator1.skipfield_pointer + distance_to_end - 1) = static_cast<skipfield_type>(previous_node_value + distance_to_end);
 				}
 
-				if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active will work
+				if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator()
 				{
 					std::memset(static_cast<void *>(std::to_address(iterator1.skipfield_pointer) + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
 				}
@@ -2386,7 +2386,7 @@ public:
 				}
 
 
-				if (distance_to_iterator2 > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() and is_active() will work
+				if (distance_to_iterator2 > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() will work
 				{
 					std::memset(static_cast<void *>(std::to_address(current_saved.skipfield_pointer) + 1), 1, sizeof(skipfield_type) * (distance_to_iterator2 - 2));
 				}
@@ -3114,24 +3114,6 @@ public:
 
 
 
-	bool is_active(const const_iterator &it) const noexcept
-	{
-		// Schema: check (a) that the group the iterator belongs to is still active and not deallocated or in the unused_groups list, then (b) that the element is not erased. (a) prevents an out-of-bounds memory access if the group is deallocated. Same reasoning as get_iterator for loop conditions
-		aligned_pointer_type end = end_iterator.element_pointer; // Same reasoning as in get_it()
-
-		for (group_pointer_type current_group = end_iterator.group_pointer; current_group != nullptr; current_group = current_group->previous_group, end = pointer_cast<aligned_pointer_type>(current_group->skipfield))
-		{
-			if (it.group_pointer == current_group && std::greater_equal()(it.element_pointer, current_group->elements) && std::less()(it.element_pointer, end)) // 2nd 2 conditions necessary in case the group contained the element which the iterator points to, has been deallocated from the hive previously, but then the same pointer address is re-supplied via an allocator for a subsequent group allocation (in which case the group's element block memory location may be different)
-			{
-				return (*it.skipfield_pointer == 0);
-			}
-		}
-
-		return false;
-	}
-
-
-
 	allocator_type get_allocator() const noexcept
 	{
 		return *this;
@@ -3220,7 +3202,7 @@ public:
 					*end_iterator.skipfield_pointer = distance_to_end;
 					*(end_iterator.skipfield_pointer + distance_to_end - 1) = distance_to_end;
 
-					if (distance_to_end > 2) // make erased middle nodes non-zero for get_iterator and is_active
+					if (distance_to_end > 2) // make erased middle nodes non-zero for get_iterator
 					{
 						std::memset(static_cast<void *>(end_iterator.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
 					}
@@ -3250,7 +3232,7 @@ public:
 				{ // update previous skipblock, no need to update free list:
 					*(end_iterator.skipfield_pointer - previous_node_value) = *(end_iterator.skipfield_pointer + distance_to_end - 1) = static_cast<skipfield_type>(previous_node_value + distance_to_end);
 
-					if (distance_to_end > 1) // make erased middle nodes non-zero for get_iterator and is_active
+					if (distance_to_end > 1) // make erased middle nodes non-zero for get_iterator
 					{
 						std::memset(static_cast<void *>(end_iterator.skipfield_pointer), 1, sizeof(skipfield_type) * (distance_to_end - 1));
 					}
