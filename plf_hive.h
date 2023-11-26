@@ -31,12 +31,12 @@
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
-    // Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
+	 // Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
 	#pragma warning ( push )
-    #pragma warning ( disable : 4127 )
+	 #pragma warning ( disable : 4127 )
 #endif
 
-#include <algorithm> // std::fill_n, std::sort
+#include <algorithm> // std::fill_n, std::sort, std::swap
 #include <cassert>	// assert
 #include <cstring>	// memset, memcpy, size_t
 #include <limits>  // std::numeric_limits
@@ -134,19 +134,19 @@ public:
 	typedef element_type value_type;
 	typedef typename std::allocator_traits<allocator_type>::size_type 			size_type;
 	typedef typename std::allocator_traits<allocator_type>::difference_type 	difference_type;
-	typedef element_type &																		reference;
-	typedef const element_type &																const_reference;
+	typedef element_type &														reference;
+	typedef const element_type &												const_reference;
 	typedef typename std::allocator_traits<allocator_type>::pointer				pointer;
 	typedef typename std::allocator_traits<allocator_type>::const_pointer		const_pointer;
 
 	// Iterator forward declarations:
-	template <bool is_const> class		hive_iterator;
+	template <bool is_const> class			hive_iterator;
 	typedef hive_iterator<false>			iterator;
 	typedef hive_iterator<true> 			const_iterator;
 	friend iterator;
 	friend const_iterator;
 
-	template <bool is_const_r> class			hive_reverse_iterator;
+	template <bool is_const_r> class		hive_reverse_iterator;
 	typedef hive_reverse_iterator<false>	reverse_iterator;
 	typedef hive_reverse_iterator<true>		const_reverse_iterator;
 	friend reverse_iterator;
@@ -171,7 +171,7 @@ private:
 	};
 
 
-		// We combine the allocation of elements and skipfield into one allocation to save performance. This memory must be allocated as an aligned type with the same alignment as T in order for the elements to align with memory boundaries correctly (which won't happen if we allocate as char or uint_8). But the larger the sizeof in the type we use for allocation, the greater the chance of creating a lot of unused memory in the skipfield portion of the allocated block. So we create a type that is sizeof(alignof(T)), as in most cases alignof(T) < sizeof(T). If alignof(t) >= sizeof(t) this makes no difference.
+	// We combine the allocation of elements and skipfield into one allocation to save performance. This memory must be allocated as an aligned type with the same alignment as T in order for the elements to align with memory boundaries correctly (which won't happen if we allocate as char or uint_8). But the larger the sizeof in the type we use for allocation, the greater the chance of creating a lot of unused memory in the skipfield portion of the allocated block. So we create a type that is sizeof(alignof(T)), as in most cases alignof(T) < sizeof(T). If alignof(t) >= sizeof(t) this makes no difference.
 	struct alignas(alignof(element_type)) aligned_allocation_struct
 	{
 	  char data[alignof(element_type)];
@@ -2618,22 +2618,21 @@ public:
 
 private:
 
-	// get all elements contiguous in memory and shrink to fit, remove erasures and erasure free lists. Invalidates all iterators and pointers to elements.
-	void consolidate()
+	// get all elements contiguous in memory and shrink to fit, remove erasures and free lists. Invalidates all iterators and pointers to elements.
+	void consolidate(const skipfield_type new_min, const skipfield_type new_max)
 	{
-		#ifdef PLF_EXCEPTIONS_SUPPORT
-			if constexpr (!(std::is_nothrow_move_constructible<element_type>::value && std::is_nothrow_move_assignable<element_type>::value))
-			{
-				hive temp(*this);
-				swap(temp);
-			}
-			else
-		#endif
+		hive temp(plf::hive_limits(new_min, new_max));
+
+		if constexpr (std::is_nothrow_move_constructible<element_type>::value)
 		{
-			hive temp(hive_limits(min_block_capacity, max_block_capacity));
 			temp.range_assign(std::make_move_iterator(begin_iterator), total_size);
-			*this = std::move(temp); // Avoid generating 2nd temporary
 		}
+		else
+		{
+			temp.range_assign(begin_iterator, total_size);
+		}
+
+		*this = std::move(temp);
 	}
 
 
@@ -2641,48 +2640,35 @@ private:
 public:
 
 
-	void reshape(const hive_limits block_limits)
+	void reshape(const plf::hive_limits block_limits)
 	{
 		check_capacities_conformance(block_limits);
-		#ifdef PLF_EXCEPTIONS_SUPPORT
-			const skipfield_type original_min = min_block_capacity, original_max = max_block_capacity;
-		#endif
-		min_block_capacity = static_cast<skipfield_type>(block_limits.min);
-		max_block_capacity = static_cast<skipfield_type>(block_limits.max);
+		const skipfield_type new_min = static_cast<skipfield_type>(block_limits.min), new_max = static_cast<skipfield_type>(block_limits.max);
 
-		// Need to check all group sizes here, because splice might append smaller blocks to the end of a larger block:
-		for (group_pointer_type current_group = begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group)
+		if (min_block_capacity > new_max || max_block_capacity < new_min) // If none of the original blocks could potentially fit within the new limits, skip checking of blocks and just consolidate:
 		{
-			if (current_group->capacity < min_block_capacity || current_group->capacity > max_block_capacity)
-			{
-				if constexpr (!(std::is_copy_constructible<element_type>::value || std::is_move_constructible<element_type>::value))
-				{
-					throw std::out_of_range("Current hive's block capacities do not fit within the supplied block limits, therefore reallocation of elements must occur, however user is using a non-copy-constructible/non-move-constructible type.");
-				}
-				else
-				{
-					#ifdef PLF_EXCEPTIONS_SUPPORT
-						try
-						{
-							consolidate();
-						}
-						catch(...)
-						{
-							min_block_capacity = original_min;
-							max_block_capacity = original_max;
-							throw;
-						}
-					#else
-						consolidate();
-					#endif
-				}
+			consolidate(new_min, new_max);
+			return;
+		}
 
-				return;
+		if (min_block_capacity < new_min || max_block_capacity > new_max) // ie. If existing blocks could be outside of the new limits
+		{
+			// Otherwise need to check all group sizes here (not just back one, which is most likely largest), because splice might append smaller blocks after a larger block:
+			for (group_pointer_type current_group = begin_iterator.group_pointer; current_group != NULL; current_group = current_group->next_group)
+			{
+				if (current_group->capacity < new_min || current_group->capacity > new_max)
+				{
+					consolidate(new_min, new_max);
+					return;
+				}
 			}
 		}
 
-		// If a consolidation or throw has not occured, process reserved/unused groups:
-		for (group_pointer_type current_group = unused_groups_head, previous_group = nullptr; current_group != nullptr;)
+		// If a consolidation or throw has not occured, process reserved/unused groups and deallocate where they don't fit the new limits:
+		min_block_capacity = new_min;
+		max_block_capacity = new_max;
+
+		for (group_pointer_type current_group = unused_groups_head, previous_group = NULL; current_group != NULL;)
 		{
 			const group_pointer_type next_group = current_group->next_group;
 
@@ -2691,7 +2677,7 @@ public:
 				total_capacity -= current_group->capacity;
 				deallocate_group(current_group);
 
-				if (previous_group == nullptr)
+				if (previous_group == NULL)
 				{
 					unused_groups_head = next_group;
 				}
@@ -2881,7 +2867,7 @@ public:
 			return;
 		}
 
-		consolidate();
+		consolidate(min_block_capacity, max_block_capacity);
 	}
 
 
@@ -3121,7 +3107,22 @@ public:
 
 
 
-	void splice(hive &&source)
+private:
+
+	void source_blocks_incompatible()
+	{
+		#ifdef PLF_EXCEPTIONS_SUPPORT
+			throw std::length_error("A source memory block capacity is outside of the destination's minimum or maximum memory block capacity limits - please change either the source or the destination's min/max block capacity limits using reshape() before calling splice() in this case");
+		#else
+			std::terminate();
+		#endif
+	}
+
+
+
+public:
+
+	void splice(hive &source)
 	{
 		// Process: if there are unused memory spaces at the end of the current back group of the chain, convert them
 		// to skipped elements and add the locations to the group's free list.
@@ -3135,36 +3136,33 @@ public:
 			return;
 		}
 
-		// Throw if incompatible group capacity found:
-		if (source.min_block_capacity < min_block_capacity || source.max_block_capacity > max_block_capacity)
+		// Throw if incompatible block capacities found in source:
+		if (source.min_block_capacity > max_block_capacity || source.max_block_capacity < min_block_capacity) // ie. source blocks cannot possibly fit within *this's block capacity limits
 		{
-			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group)
+			source_blocks_incompatible();
+		}
+		else if (source.min_block_capacity < min_block_capacity || source.max_block_capacity > max_block_capacity) // ie. source blocks may or may not fit
+		{
+			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != NULL; current_group = current_group->next_group)
 			{
 				if (current_group->capacity < min_block_capacity || current_group->capacity > max_block_capacity)
 				{
-					#ifdef PLF_EXCEPTIONS_SUPPORT
-						throw std::out_of_range("A source memory block capacity is outside of the destination's minimum or maximum memory block capacity limits - please change either the source or the destination's min/max block capacity limits using reshape() before calling splice() in this case");
-					#else
-						std::terminate();
-					#endif
+					source_blocks_incompatible();
 				}
 			}
 		}
 
-		// Preserve original unused_groups so that both source and destination retain theirs in case of swap or std::move below:
+
 		if (total_size != 0)
 		{
 			// If there's more unused element locations in back memory block of destination than in back memory block of source, swap with source to reduce number of skipped elements during iteration:
 			if ((pointer_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield) - end_iterator.element_pointer) > (pointer_cast<aligned_pointer_type>(source.end_iterator.group_pointer->skipfield) - source.end_iterator.element_pointer))
 			{
 				swap(source);
-
-				// Swap block capacity limits back to where they were:
-				const skipfield_type source_hive_limits[2] = {source.min_block_capacity, source.max_block_capacity};
-				source.min_block_capacity = min_block_capacity;
-				source.max_block_capacity = max_block_capacity;
-				min_block_capacity = source_hive_limits[0];
-				max_block_capacity = source_hive_limits[1];
+				// Swap back unused groups list and block capacity limits so that source and *this retain their original ones:
+				std::swap(source.unused_groups_head, unused_groups_head);
+				std::swap(source.min_block_capacity, min_block_capacity);
+				std::swap(source.max_block_capacity, max_block_capacity);
 			}
 
 
@@ -3271,6 +3269,7 @@ public:
 			const group_pointer_type original_unused_groups = unused_groups_head;
 			unused_groups_head = nullptr;
 			destroy_all_data();
+			unused_groups_head = original_unused_groups;
 
 			// Move source data to *this:
 			end_iterator = source.end_iterator;
@@ -3279,8 +3278,7 @@ public:
 			total_size = source.total_size;
 			total_capacity = source.total_capacity;
 
-			// Restore unused_groups_head and add capacity for unused groups back into *this:
-			unused_groups_head = original_unused_groups;
+			// Add capacity for unused groups back into *this:
 			for (group_pointer_type current = original_unused_groups; current != nullptr; current = current->next_group)
 			{
 				total_capacity += current->capacity;
@@ -3317,7 +3315,7 @@ public:
 
 
 
-	void splice(hive &source)
+	void splice(hive &&source)
 	{
 		splice(std::move(source));
 	}
@@ -3378,7 +3376,7 @@ public:
 			{
 				std::uninitialized_copy(begin_iterator, end_iterator, sort_array);
 			}
-			
+
 			std::sort(sort_array, end, compare);
 
 			if constexpr (!std::is_trivially_copyable<element_type>::value && std::is_move_assignable<element_type>::value)
@@ -3397,7 +3395,7 @@ public:
 					}
 				}
 			}
-			
+
 			std::allocator_traits<allocator_type>::deallocate(*this, sort_array, total_size);
 		}
  		else
@@ -3548,9 +3546,7 @@ public:
 
 			if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_swap::value && !std::allocator_traits<allocator_type>::is_always_equal::value)
 			{
-				allocator_type swap_allocator = std::move(static_cast<allocator_type &>(source));
-				static_cast<allocator_type &>(source) = std::move(static_cast<allocator_type &>(*this));
-				static_cast<allocator_type &>(*this) = std::move(swap_allocator);
+				std::swap(static_cast<allocator_type &>(source), static_cast<allocator_type &>(*this));
 
 				// Reconstruct rebinds for swapped allocators:
 				group_allocator = group_allocator_type(*this);
@@ -4609,7 +4605,7 @@ public:
 					if (group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // ie. if there are no erasures in the group
 					{
 						const difference_type distance_from_end = pointer_cast<aligned_pointer_type>(group_pointer->skipfield) - element_pointer;
-	
+
 						if (distance < distance_from_end)
 						{
 							element_pointer += distance;
