@@ -3287,15 +3287,15 @@ public:
 
 
 		// Reset source values:
-		const group_pointer_type source_unused_groups_head = source.unused_groups_head;
-		source.blank();
+		group_pointer_type const original_unused_groups_head = source.unused_groups_head; // grab value before it gets wiped
+		source.blank(); // blank source before adding capacity from unused groups back in 
 
-		if (source_unused_groups_head != nullptr) // If there were unused_groups in source, re-link them and remove their capacity count from *this:
+		if (source.unused_groups_head != NULL) // If there were unused groups in source, re-link them and remove their capacity count from *this while adding it to source:
 		{
 			size_type source_unused_groups_capacity = 0;
 
 			// Count capacity in source unused_groups:
-			for (group_pointer_type current = source_unused_groups_head; current != nullptr; current = current->next_group)
+			for (group_pointer_type current = original_unused_groups_head; current != NULL; current = current->next_group)
 			{
 				source_unused_groups_capacity += current->capacity;
 			}
@@ -3304,12 +3304,12 @@ public:
 			source.total_capacity = source_unused_groups_capacity;
 
 			// Establish first group from source unused_groups as first active group in source, link rest as reserved groups:
-			source.unused_groups_head = source_unused_groups_head->next_group;
-			source.begin_iterator.group_pointer = source_unused_groups_head;
-			source.begin_iterator.element_pointer = source_unused_groups_head->elements;
-			source.begin_iterator.skipfield_pointer = source_unused_groups_head->skipfield;
+			source.unused_groups_head = original_unused_groups_head->next_group;
+			source.begin_iterator.group_pointer = original_unused_groups_head;
+			source.begin_iterator.element_pointer = original_unused_groups_head->elements;
+			source.begin_iterator.skipfield_pointer = original_unused_groups_head->skipfield;
 			source.end_iterator = source.begin_iterator;
-			source.unused_groups_head->reset(0, nullptr, nullptr, 0);
+			original_unused_groups_head->reset(0, NULL, NULL, 0);
 		}
 	}
 
@@ -3521,6 +3521,7 @@ public:
 		}
 		else
 		{
+			// Otherwise, make the reads/writes as contiguous in memory as-possible:
 			const iterator 					swap_end_iterator = end_iterator, swap_begin_iterator = begin_iterator;
 			const group_pointer_type		swap_erasure_groups_head = erasure_groups_head, swap_unused_groups_head = unused_groups_head;
 			const size_type					swap_total_size = total_size, swap_total_capacity = total_capacity;
@@ -3896,7 +3897,7 @@ public:
 
 
 				// Special case for initial element pointer and initial group (we don't know how far into the group the element pointer is)
-				if (element_pointer != group_pointer->elements + *(group_pointer->skipfield)) // ie. != first non-erased element in group
+				if (element_pointer != group_pointer->elements + *(group_pointer->skipfield))  // ie. != first non-erased element in group - otherwise we skip this section and just treat the first block as we would an intermediary block
 				{
 					const difference_type distance_from_end = pointer_cast<aligned_pointer_type>(group_pointer->skipfield) - element_pointer;
 
