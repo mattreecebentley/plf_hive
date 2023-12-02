@@ -74,7 +74,15 @@ struct small_struct
 	int number;
 	unsigned int empty_field4;
 
-	small_struct(const int num) : number(num) {};
+	int operator * () const { return number; };
+	bool operator == (const small_struct &source) const noexcept { return source.number == number; };
+	bool operator != (const small_struct &source) const noexcept { return source.number != number; };
+	bool operator > (const small_struct &source) const noexcept { return number > source.number; };
+	bool operator < (const small_struct &source) const noexcept { return number < source.number; };
+	bool operator >= (const small_struct &source) const noexcept { return number >= source.number; };
+	bool operator <= (const small_struct &source) const noexcept { return number <= source.number; };
+	
+	small_struct(const unsigned int num) noexcept: number(num) {};
 };
 
 
@@ -166,7 +174,7 @@ int main()
 			std::advance(plus_two_hundred, 200);
 
 			failpass("Iterator + distance test", std::distance(p_hive.begin(), plus_twenty) == 20);
-			failpass("Iterator - distance test", std::distance(plus_two_hundred, p_hive.begin()) == -200);
+			failpass("Iterator + distance test 2", std::distance(p_hive.begin(), plus_two_hundred) == 200);
 
 			{
 				hive<int> d_hive(1000, 1, {20, 20});
@@ -222,8 +230,9 @@ int main()
 
 				for (int counter = 0; counter != 10000; ++counter)
 				{
-					const int dist1 = rand() % (d_size - 2), dist2 = rand() % (d_size - 2);
+					int dist1 = rand() % (d_size - 2), dist2 = rand() % (d_size - 2);
 					hive<int>::iterator first = d_hive.begin(), last = d_hive.begin();
+					if (dist1 > dist2) std::swap(dist1, dist2);
 					std::advance(first, dist1);
 					std::advance(last, dist2);
 
@@ -258,7 +267,7 @@ int main()
 			hive<int *>::const_iterator prev_iterator = std::prev(p_hive.cend(), 300);
 
 			failpass("Iterator next test", std::distance(p_hive.begin(), next_iterator) == 5);
-			failpass("Const iterator prev test", std::distance(p_hive.cend(), prev_iterator) == -300);
+			failpass("Const iterator prev test", std::distance(prev_iterator, p_hive.cend()) == 300);
 
 			hive<int *>::iterator prev_iterator2 = std::prev(p_hive.end(), 300);
 			failpass("Iterator/Const iterator equality operator test", prev_iterator == prev_iterator2);
@@ -307,7 +316,7 @@ int main()
 
 			hive<int *>::reverse_iterator r_iterator3 = std::make_reverse_iterator(++(p_hive.begin()));
 
-			failpass("std::reverse_iterator and negative distance test", std::distance(p_hive.rend(), r_iterator3) == -1);
+			failpass("std::reverse_iterator and negative distance test", std::distance(r_iterator3, p_hive.rend()) == 1);
 
 
 			numtotal = 0;
@@ -980,7 +989,7 @@ int main()
 				i_hive.clear();
 				internal_loop_counter = 0;
 
-				i_hive.insert(10000, 10);
+				i_hive.insert(10000); // Use default-fill insertion
 
 				while (!i_hive.empty())
 				{
@@ -1201,6 +1210,86 @@ int main()
 			}
 
 			failpass("Greater-than sort test", sorted);
+
+
+			i_hive.clear();
+			i_hive.trim_capacity();
+			i_hive.reserve(512);
+
+			for (unsigned int temp = 0; temp != 200; ++temp)
+			{
+				i_hive.insert(rand() & 65535);
+			}
+
+			i_hive.sort();
+
+			previous = 0;
+
+			for (hive<int>::iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				if (previous > *current)
+				{
+					sorted = false;
+					break;
+				}
+
+				previous = *current;
+			}
+
+			failpass("Less-than sort with allocation optimization 1 test - small types", sorted);
+
+
+			hive<small_struct> ss_hive;
+			ss_hive.reserve(512);
+
+			for (unsigned int temp = 0; temp != 200; ++temp)
+			{
+				ss_hive.insert(rand() & 65535);
+			}
+
+			ss_hive.sort();
+
+			small_struct ss_previous(0);
+
+			for (hive<small_struct>::iterator current = ss_hive.begin(); current != ss_hive.end(); ++current)
+			{
+				if (ss_previous > *current)
+				{
+					sorted = false;
+					break;
+				}
+
+				ss_previous = *current;
+			}
+
+			failpass("Less-than sort with allocation optimization 2 test - large type 1", sorted);
+
+
+			ss_hive.clear();
+			ss_hive.reshape({100, 100});
+			ss_hive.reserve(200);
+
+			for (unsigned int temp = 0; temp != 75; ++temp)
+			{
+				ss_hive.insert(rand() & 65535);
+			}
+
+			ss_hive.sort();
+
+			ss_previous = 0;
+
+			for (hive<small_struct>::iterator current = ss_hive.begin(); current != ss_hive.end(); ++current)
+			{
+				if (ss_previous > *current)
+				{
+					sorted = false;
+					break;
+				}
+
+				ss_previous = *current;
+			}
+
+			failpass("Less-than sort with allocation optimization 3 test - large type 2", sorted);
 		}
 
 
@@ -1536,11 +1625,11 @@ int main()
 
 			plf::hive_limits temp_limits = hive1.block_capacity_limits();
 
-			failpass("get_block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 255);
+			failpass("block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 255);
 
 			temp_limits = plf::hive<int>::block_capacity_hard_limits();
 
-			failpass("get_block_capacity_limits test", temp_limits.min == 3 && temp_limits.max == 255);
+			failpass("block_capacity_hard_limits test", temp_limits.min == 3 && temp_limits.max == 255);
 
 			for (int counter = 0; counter != 3300; ++counter)
 			{
