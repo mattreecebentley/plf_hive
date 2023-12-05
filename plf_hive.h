@@ -2641,7 +2641,7 @@ public:
 		if (min_block_capacity < new_min || max_block_capacity > new_max) // ie. If existing blocks could be outside of the new limits
 		{
 			// Otherwise need to check all group sizes here (not just back one, which is most likely largest), because splice might append smaller blocks after a larger block:
-			for (group_pointer_type current_group = begin_iterator.group_pointer; current_group != NULL; current_group = current_group->next_group)
+			for (group_pointer_type current_group = begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group)
 			{
 				if (current_group->capacity < new_min || current_group->capacity > new_max)
 				{
@@ -2655,7 +2655,7 @@ public:
 		min_block_capacity = new_min;
 		max_block_capacity = new_max;
 
-		for (group_pointer_type current_group = unused_groups_head, previous_group = NULL; current_group != NULL;)
+		for (group_pointer_type current_group = unused_groups_head, previous_group = nullptr; current_group != nullptr;)
 		{
 			const group_pointer_type next_group = current_group->next_group;
 
@@ -2664,7 +2664,7 @@ public:
 				total_capacity -= current_group->capacity;
 				deallocate_group(current_group);
 
-				if (previous_group == NULL)
+				if (previous_group == nullptr)
 				{
 					unused_groups_head = next_group;
 				}
@@ -3023,8 +3023,8 @@ private:
 	{
 		const aligned_pointer_type aligned_element_pointer = pointer_cast<aligned_pointer_type>(element_pointer);
 
-		// Start with last group first, as will be the largest group in most cases so statistically-higher chance of the element being in it:
-		aligned_pointer_type end = end_iterator.element_pointer; // This line is important in case the element was in a group which became empty, got moved to the unused_groups list or was deallocated, and then was re-used. It prevents the function from mistakenly giving an iterator which is beyond the back element of the hive.
+		// Start with last group first, as will be the largest group in most cases so there's a statistically-higher chance of the element being in it:
+		aligned_pointer_type end = end_iterator.element_pointer; // This line is important in case the element was in a group which became empty, got moved to the unused_groups list or was deallocated, and then was re-used. It prevents the function from mistakenly providing an iterator which is beyond the back element of the hive.
 		for (group_pointer_type current_group = end_iterator.group_pointer; current_group != nullptr; current_group = current_group->previous_group, end = pointer_cast<aligned_pointer_type>(current_group->skipfield))
 		{
 			if (std::greater_equal()(aligned_element_pointer, current_group->elements) && std::less()(aligned_element_pointer, end))
@@ -3098,7 +3098,7 @@ public:
 		}
 		else if (source.min_block_capacity < min_block_capacity || source.max_block_capacity > max_block_capacity) // ie. source blocks may or may not fit
 		{
-			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != NULL; current_group = current_group->next_group)
+			for (group_pointer_type current_group = source.begin_iterator.group_pointer; current_group != nullptr; current_group = current_group->next_group)
 			{
 				if (current_group->capacity < min_block_capacity || current_group->capacity > max_block_capacity)
 				{
@@ -3245,12 +3245,12 @@ public:
 		group_pointer_type const original_unused_groups_head = source.unused_groups_head; // grab value before it gets wiped
 		source.blank(); // blank source before adding capacity from unused groups back in
 
-		if (source.unused_groups_head != NULL) // If there were unused groups in source, re-link them and remove their capacity count from *this while adding it to source:
+		if (original_unused_groups_head != nullptr) // If there were unused groups in source, re-link them and remove their capacity count from *this while adding it to source:
 		{
 			size_type source_unused_groups_capacity = 0;
 
 			// Count capacity in source unused_groups:
-			for (group_pointer_type current = original_unused_groups_head; current != NULL; current = current->next_group)
+			for (group_pointer_type current = original_unused_groups_head; current != nullptr; current = current->next_group)
 			{
 				source_unused_groups_capacity += current->capacity;
 			}
@@ -3264,7 +3264,7 @@ public:
 			source.begin_iterator.element_pointer = original_unused_groups_head->elements;
 			source.begin_iterator.skipfield_pointer = original_unused_groups_head->skipfield;
 			source.end_iterator = source.begin_iterator;
-			original_unused_groups_head->reset(0, NULL, NULL, 0);
+			original_unused_groups_head->reset(0, nullptr, nullptr, 0);
 		}
 	}
 
@@ -3322,7 +3322,7 @@ private:
 				return end_iterator.element_pointer;
 			}
 
-			for (group_pointer_type current = unused_groups_head; current != NULL; current = current->next_group)
+			for (group_pointer_type current = unused_groups_head; current != nullptr; current = current->next_group)
 			{
 				if (current->capacity >= number_of_elements_needed)
 				{ // there is enough space in one of the unused blocks
