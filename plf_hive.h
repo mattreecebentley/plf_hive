@@ -916,6 +916,14 @@ private:
 		next_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
 		return next_group;
 	}
+	
+	
+
+	template<typename... arguments>
+	constexpr void construct_element(aligned_pointer_type const location, arguments &&... parameters)
+	{
+		std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(location), std::forward<arguments>(parameters) ...);
+	}
 
 
 
@@ -935,13 +943,13 @@ public:
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), element);
+							construct_element(end_iterator.element_pointer, element);
 							++end_iterator.element_pointer; // Shift the addition outside, avoiding a try-catch block if an exception is thrown during construction
 						}
 						else
 					#endif
 					{ // For no good reason this compiles to much faster code under GCC in raw small struct tests - don't need to avoid try-catch here, so can keep the ++ in the first line:
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), element);
+						construct_element(end_iterator.element_pointer++, element);
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -964,7 +972,7 @@ public:
 						{
 							try
 							{
-								std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), element);
+								construct_element(next_group->elements, element);
 							}
 							catch (...)
 							{
@@ -975,14 +983,14 @@ public:
 						else
 					#endif
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), element);
+						construct_element(next_group->elements, element);
 					}
 
 					total_capacity += new_group_size;
 				}
 				else
 				{
-					std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(unused_groups_head->elements), element);
+					construct_element(unused_groups_head->elements, element);
 					next_group = reuse_unused_group();
 				}
 
@@ -1000,7 +1008,7 @@ public:
 
 				// We always reuse the element at the start of the skipblock, this is also where the free-list information for that skipblock is stored. Get the previous free-list node's index from this memory space, before we write to our element to it. 'Next' index is always the free_list_head (as represented by the maximum value of the skipfield type) here so we don't need to get it:
 				const skipfield_type prev_free_list_index = *pointer_cast<skipfield_pointer_type>(new_location.element_pointer);
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(new_location.element_pointer), element);
+				construct_element(new_location.element_pointer, element);
 				update_skipblock(new_location, prev_free_list_index);
 
 				return new_location;
@@ -1015,7 +1023,7 @@ public:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), element);
+						construct_element(end_iterator.element_pointer++, element);
 					}
 					catch (...)
 					{
@@ -1026,7 +1034,7 @@ public:
 				else
 			#endif
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), element);
+				construct_element(end_iterator.element_pointer++, element);
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1050,13 +1058,13 @@ public:
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::move(element));
+							construct_element(end_iterator.element_pointer, std::move(element));
 							++end_iterator.element_pointer;
 						}
 						else
 					#endif
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::move(element));
+						construct_element(end_iterator.element_pointer++, std::move(element));
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -1079,7 +1087,7 @@ public:
 						{
 							try
 							{
-								std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), std::move(element));
+								construct_element(next_group->elements, std::move(element));
 							}
 							catch (...)
 							{
@@ -1090,14 +1098,14 @@ public:
 						else
 					#endif
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), std::move(element));
+						construct_element(next_group->elements, std::move(element));
 					}
 
 					total_capacity += new_group_size;
 				}
 				else
 				{
-					std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(unused_groups_head->elements), std::move(element));
+					construct_element(unused_groups_head->elements, std::move(element));
 					next_group = reuse_unused_group();
 				}
 
@@ -1114,7 +1122,7 @@ public:
 				iterator new_location(erasure_groups_head, erasure_groups_head->elements + erasure_groups_head->free_list_head, erasure_groups_head->skipfield + erasure_groups_head->free_list_head);
 
 				const skipfield_type prev_free_list_index = *pointer_cast<skipfield_pointer_type>(new_location.element_pointer);
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(new_location.element_pointer), std::move(element));
+				construct_element(new_location.element_pointer, std::move(element));
 				update_skipblock(new_location, prev_free_list_index);
 
 				return new_location;
@@ -1129,7 +1137,7 @@ public:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::move(element));
+						construct_element(end_iterator.element_pointer++, std::move(element));
 					}
 					catch (...)
 					{
@@ -1140,7 +1148,7 @@ public:
 				else
 			#endif
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::move(element));
+				construct_element(end_iterator.element_pointer++, std::move(element));
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1165,13 +1173,13 @@ public:
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_constructible<element_type>::value)
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::forward<arguments>(parameters) ...);
+							construct_element(end_iterator.element_pointer, std::forward<arguments>(parameters) ...);
 							++end_iterator.element_pointer;
 						}
 						else
 					#endif
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
+						construct_element(end_iterator.element_pointer++, std::forward<arguments>(parameters) ...);
 					}
 
 					++(end_iterator.group_pointer->size);
@@ -1194,7 +1202,7 @@ public:
 						{
 							try
 							{
-								std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
+								construct_element(next_group->elements, std::forward<arguments>(parameters) ...);
 							}
 							catch (...)
 							{
@@ -1205,14 +1213,14 @@ public:
 						else
 					#endif
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(next_group->elements), std::forward<arguments>(parameters) ...);
+						construct_element(next_group->elements, std::forward<arguments>(parameters) ...);
 					}
 
 					total_capacity += new_group_size;
 				}
 				else
 				{
-					std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(unused_groups_head->elements), std::forward<arguments>(parameters) ...);
+					construct_element(unused_groups_head->elements, std::forward<arguments>(parameters) ...);
 					next_group = reuse_unused_group();
 				}
 
@@ -1229,7 +1237,7 @@ public:
 				iterator new_location(erasure_groups_head, erasure_groups_head->elements + erasure_groups_head->free_list_head, erasure_groups_head->skipfield + erasure_groups_head->free_list_head);
 
 				const skipfield_type prev_free_list_index = *pointer_cast<skipfield_pointer_type>(new_location.element_pointer);
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(new_location.element_pointer), std::forward<arguments>(parameters) ...);
+				construct_element(new_location.element_pointer, std::forward<arguments>(parameters) ...);
 				update_skipblock(new_location, prev_free_list_index);
 
 				return new_location;
@@ -1244,7 +1252,7 @@ public:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
+						construct_element(end_iterator.element_pointer++, std::forward<arguments>(parameters) ...);
 					}
 					catch (...)
 					{
@@ -1255,7 +1263,7 @@ public:
 				else
 			#endif
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer++), std::forward<arguments>(parameters) ...);
+				construct_element(end_iterator.element_pointer++, std::forward<arguments>(parameters) ...);
 			}
 
 			++end_iterator.skipfield_pointer;
@@ -1297,7 +1305,7 @@ private:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), element);
+						construct_element(end_iterator.element_pointer, element);
 					}
 					catch (...)
 					{
@@ -1328,7 +1336,7 @@ private:
 
 			do
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), element);
+				construct_element(end_iterator.element_pointer, element);
 			} while (++end_iterator.element_pointer != fill_end);
 		}
 
@@ -1377,7 +1385,7 @@ private:
 				{
 					try
 					{
-						std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), element);
+						construct_element(current_location, element);
 					}
 					catch (...)
 					{
@@ -1406,7 +1414,7 @@ private:
 
 			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), element);
+				construct_element(current_location, element);
 			}
 		}
 
@@ -1568,11 +1576,11 @@ private:
 					{
 						if constexpr (std::is_copy_constructible<element_type>::value)
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::move(*it++));
+							construct_element(end_iterator.element_pointer, std::move(*it++));
 						}
 						else
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), *it++);
+							construct_element(end_iterator.element_pointer, *it++);
 						}
 					}
 					catch (...)
@@ -1588,14 +1596,14 @@ private:
 		{
 			do
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), *it++);
+				construct_element(end_iterator.element_pointer, *it++);
 			} while (++end_iterator.element_pointer != fill_end);
 		}
 		else // assumes moveable-but-not-copyable type
 		{
 			do
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(end_iterator.element_pointer), std::move(*it++));
+				construct_element(end_iterator.element_pointer, std::move(*it++));
 			} while (++end_iterator.element_pointer != fill_end);
 		}
 
@@ -1621,11 +1629,11 @@ private:
 					{
 						if constexpr (std::is_copy_constructible<element_type>::value)
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), std::move(*it++));
+							construct_element(current_location, std::move(*it++));
 						}
 						else
 						{
-							std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), *it++);
+							construct_element(current_location, *it++);
 						}
 					}
 					catch (...)
@@ -1641,14 +1649,14 @@ private:
 		{
 			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), *it++);
+				construct_element(current_location, *it++);
 			}
 		}
 		else // assumes moveable-but-not-copyable type
 		{
 			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 			{
-				std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(current_location), std::move(*it++));
+				construct_element(current_location, std::move(*it++));
 			}
 		}
 
