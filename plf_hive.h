@@ -909,15 +909,15 @@ private:
 
 
 	group_pointer_type reuse_unused_group() noexcept
-	{
-		group_pointer_type const next_group = unused_groups_head;
-		unused_groups_head = next_group->next_group;
+	{                                     
+		group_pointer_type const reused_group = unused_groups_head;
+		unused_groups_head = reused_group->next_group;
 		reset_group_numbers_if_necessary();
-		next_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
-		return next_group;
+		reused_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
+		return reused_group;
 	}
-	
-	
+
+
 
 	template<typename... arguments>
 	constexpr void construct_element(aligned_pointer_type const location, arguments &&... parameters)
@@ -930,33 +930,22 @@ private:
 public:
 
 
-	iterator insert(const element_type &element)
+	iterator insert(const element_type &element) // Note: defining insert & and insert && as calls to emplace results in larger codegen in release mode (under GCC at least), and prevents more accurate is_nothrow tests
 	{
-		if (end_iterator.element_pointer != nullptr)
+		if (end_iterator.element_pointer != nullptr) // ie. empty hive, no blocks allocated yet
 		{
 			if (erasure_groups_head == nullptr) // ie. there are no erased elements
 			{
-				if (end_iterator.element_pointer != pointer_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield)) // end_iterator is not at end of block
+				if (end_iterator.element_pointer != pointer_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield)) // ie. end_iterator is not at end of block
 				{
-					const iterator return_iterator = end_iterator; // Make copy for return before modifying end_iterator
+					construct_element(end_iterator.element_pointer, element);
 
-					#ifdef PLF_EXCEPTIONS_SUPPORT
-						if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
-						{
-							construct_element(end_iterator.element_pointer, element);
-							++end_iterator.element_pointer; // Shift the addition outside, avoiding a try-catch block if an exception is thrown during construction
-						}
-						else
-					#endif
-					{ // For no good reason this compiles to much faster code under GCC in raw small struct tests - don't need to avoid try-catch here, so can keep the ++ in the first line:
-						construct_element(end_iterator.element_pointer++, element);
-					}
-
-					++(end_iterator.group_pointer->size);
+					const iterator return_iterator = end_iterator;
+					++end_iterator.element_pointer;
 					++end_iterator.skipfield_pointer;
+					++(end_iterator.group_pointer->size);
 					++total_size;
-
-					return return_iterator; // value before incrementation
+					return return_iterator;
 				}
 
 				group_pointer_type next_group;
@@ -1053,22 +1042,12 @@ public:
 			{
 				if (end_iterator.element_pointer != pointer_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield))
 				{
+					construct_element(end_iterator.element_pointer, std::move(element));
+
 					const iterator return_iterator = end_iterator;
-
-					#ifdef PLF_EXCEPTIONS_SUPPORT
-						if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
-						{
-							construct_element(end_iterator.element_pointer, std::move(element));
-							++end_iterator.element_pointer;
-						}
-						else
-					#endif
-					{
-						construct_element(end_iterator.element_pointer++, std::move(element));
-					}
-
-					++(end_iterator.group_pointer->size);
+					++end_iterator.element_pointer;
 					++end_iterator.skipfield_pointer;
+					++(end_iterator.group_pointer->size);
 					++total_size;
 
 					return return_iterator;
@@ -1168,22 +1147,12 @@ public:
 			{
 				if (end_iterator.element_pointer != pointer_cast<aligned_pointer_type>(end_iterator.group_pointer->skipfield))
 				{
+					construct_element(end_iterator.element_pointer, std::forward<arguments>(parameters) ...);
+
 					const iterator return_iterator = end_iterator;
-
-					#ifdef PLF_EXCEPTIONS_SUPPORT
-						if constexpr (!std::is_nothrow_constructible<element_type>::value)
-						{
-							construct_element(end_iterator.element_pointer, std::forward<arguments>(parameters) ...);
-							++end_iterator.element_pointer;
-						}
-						else
-					#endif
-					{
-						construct_element(end_iterator.element_pointer++, std::forward<arguments>(parameters) ...);
-					}
-
-					++(end_iterator.group_pointer->size);
+					++end_iterator.element_pointer;
 					++end_iterator.skipfield_pointer;
+					++(end_iterator.group_pointer->size);
 					++total_size;
 
 					return return_iterator;
@@ -1891,7 +1860,7 @@ public:
 
 		--total_size;
 
-		if (it.group_pointer->size-- != 1) // ie. non-empty group at this point in time, don't consolidate - optimization note: GCC optimizes postfix - 1 comparison better than prefix - 1 comparison in some cases.
+		if (--(it.group_pointer->size) != 0) // ie. non-empty group at this point in time, don't consolidate
 		{
 			// Code logic for following section:
 			// ---------------------------------
@@ -3615,7 +3584,7 @@ public:
 
 
 
-		hive_iterator (const hive_iterator &source) noexcept: // Note: Surprisingly, use of = default here and in other simple constructors results in slowdowns of ~10% in many benchmarks under GCC
+		hive_iterator (const hive_iterator &source) noexcept: // Note: Surprisingly, use of = default here and in other simple constructors results in slowdowns of up to 10% in many benchmarks under GCC
 			group_pointer(source.group_pointer),
 			element_pointer(source.element_pointer),
 			skipfield_pointer(source.skipfield_pointer)
@@ -4694,13 +4663,13 @@ public:
 template<class element_type>
 struct hive_eq_to
 {
-	const element_type value;
+	const element_type &value;
 
-	explicit hive_eq_to(const element_type store_value): /* may not be noexcept as the element may allocate and therefore potentially throw when copied */
+	explicit hive_eq_to(const element_type &store_value) noexcept:
 		value(store_value)
 	{}
 
-	bool operator() (const element_type compare_value) const noexcept
+	bool operator() (const element_type &compare_value) const noexcept
 	{
 		return value == compare_value;
 	}
