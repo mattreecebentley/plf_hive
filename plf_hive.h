@@ -3737,15 +3737,10 @@ public:
 		{
 			assert(group_pointer != nullptr);
 
-			if (element_pointer != group_pointer->elements) // ie. not already at beginning of group
+			if (--skipfield_pointer >= group_pointer->skipfield) // ie. not already at beginning of group prior to decrementation
 			{
-				const skipfield_type skip = *(--skipfield_pointer);
-				skipfield_pointer -= skip;
-
-				if ((element_pointer -= static_cast<size_type>(skip) + 1u) != group_pointer->elements - 1) // ie. iterator was not already at beginning of hive (with some previous consecutive deleted elements), and skipfield does not takes us into the previous group)
-				{
-					return *this;
-				}
+				element_pointer -= static_cast<size_type>(*skipfield_pointer) + 1u;
+				if ((skipfield_pointer -= *skipfield_pointer) >= group_pointer->skipfield) return *this; // ie. skipfield jump value does not takes us beyond beginning of group
 			}
 
 			group_pointer = group_pointer->previous_group;
@@ -4316,28 +4311,23 @@ public:
 
 			assert(group_pointer != nullptr);
 
-			if (element_pointer != group_pointer->elements) // ie. not already at beginning of group
+			if (--skipfield_pointer >= group_pointer->skipfield)
 			{
-				element_pointer -= static_cast<size_type>(*(--skipfield_pointer)) + 1u;
-				skipfield_pointer -= *skipfield_pointer;
-
-				if (!(element_pointer == group_pointer->elements - 1 && group_pointer->previous_group == nullptr)) // ie. iterator is not == rend()
-				{
-					return *this;
-				}
+				element_pointer -= static_cast<size_type>(*skipfield_pointer) + 1u;
+				if ((skipfield_pointer -= *skipfield_pointer) >= group_pointer->skipfield) return *this;
 			}
 
-			if (group_pointer->previous_group != nullptr) // ie. not first group in hive
+			if (group_pointer->previous_group != nullptr)
 			{
 				group_pointer = group_pointer->previous_group;
-				skipfield_pointer = group_pointer->skipfield + group_pointer->capacity - 1;
-				element_pointer = (pointer_cast<aligned_pointer_type>(group_pointer->skipfield) - 1) - *skipfield_pointer;
-				skipfield_pointer -= *skipfield_pointer;
+				const skipfield_pointer_type skipfield = group_pointer->skipfield + group_pointer->capacity - 1;
+				const skipfield_type skip = *skipfield;
+				element_pointer = (pointer_cast<aligned_pointer_type>(group_pointer->skipfield) - 1) - skip;
+				skipfield_pointer = skipfield - skip;
 			}
-			else // necessary so that reverse_iterator can end up == rend(), if we were already at first element in hive
+			else // bound to rend()
 			{
 				--element_pointer;
-				--skipfield_pointer;
 			}
 
 			return *this;
@@ -4365,7 +4355,7 @@ public:
 		hive_reverse_iterator operator -- (int)
 		{
 			const hive_reverse_iterator copy(*this);
-			--*this;
+			++current;
 			return copy;
 		}
 
