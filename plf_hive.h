@@ -1,4 +1,4 @@
-// Copyright (c) 2023, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
+// Copyright (c) 2024, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
 
 // zLib license (https://www.zlib.net/zlib_license.html):
 // This software is provided 'as-is', without any express or implied
@@ -900,16 +900,13 @@ private:
 
 	void reset_group_numbers_if_necessary() noexcept
 	{
-		if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max())
-		{
-			reset_group_numbers();
-		}
+		if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max()) reset_group_numbers();
 	}
 
 
 
 	group_pointer_type reuse_unused_group() noexcept
-	{                                     
+	{
 		group_pointer_type const reused_group = unused_groups_head;
 		unused_groups_head = reused_group->next_group;
 		reset_group_numbers_if_necessary();
@@ -1468,10 +1465,7 @@ public:
 					erasure_groups_head = erasure_groups_head->erasures_list_next_group; // change groups
 				}
 
-				if (size == 0)
-				{
-					return;
-				}
+				if (size == 0) return;
 			}
 			else // skipblock is larger than remaining number of elements
 			{
@@ -1518,12 +1512,7 @@ public:
 
 		// Use unused groups:
 		end_iterator.group_pointer->next_group = unused_groups_head;
-
-		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size)
-		{
-			reset_group_numbers();
-		}
-
+		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) reset_group_numbers();
 		fill_unused_groups(size, element, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
@@ -1709,10 +1698,7 @@ private:
 					erasure_groups_head = erasure_groups_head->erasures_list_next_group;
 				}
 
-				if (size == 0)
-				{
-					return;
-				}
+				if (size == 0) return;
 			}
 			else
 			{
@@ -1752,12 +1738,7 @@ private:
 
 
 		end_iterator.group_pointer->next_group = unused_groups_head;
-
-		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size)
-		{
-			reset_group_numbers();
-		}
-
+		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) reset_group_numbers();
 		range_fill_unused_groups(size, it, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
@@ -1973,10 +1954,7 @@ public:
 				return_iterator.skipfield_pointer = skipfield + *skipfield;
 			}
 
-			if (it.element_pointer == begin_iterator.element_pointer) // If original iterator was first element in hive, update it's value with the next non-erased element:
-			{
-				begin_iterator = return_iterator;
-			}
+			if (it.element_pointer == begin_iterator.element_pointer) begin_iterator = return_iterator; // If original iterator was first element in hive, update it's value with the next non-erased element:
 
 			return return_iterator;
 		}
@@ -2430,18 +2408,11 @@ private:
 					total_capacity -= current_group->capacity;
 					deallocate_group(current_group);
 
-					if (current_group == begin_iterator.group_pointer)
-					{
-						begin_iterator.group_pointer = next_group;
-					}
+					if (current_group == begin_iterator.group_pointer) begin_iterator.group_pointer = next_group;
 				}
 				else
 				{
-					if (previous_group != nullptr)
-					{
-						previous_group->next_group = current_group;
-					}
-
+					if (previous_group != nullptr) previous_group->next_group = current_group;
 					previous_group = current_group;
 				}
 
@@ -2452,10 +2423,7 @@ private:
 		}
 		else
 		{
-			if (size > total_capacity)
-			{
-				reserve(size);
-			}
+			if (size > total_capacity) reserve(size);
 
 			// Join all unused_groups to main chain:
 			end_iterator.group_pointer->next_group = unused_groups_head;
@@ -2672,10 +2640,7 @@ public:
 
 	void clear() noexcept
 	{
-		if (total_size == 0)
-		{
-			return;
-		}
+		if (total_size == 0) return;
 
 		// Destroy all elements if element type is non-trivial:
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
@@ -2801,10 +2766,7 @@ public:
 
 	void trim_capacity() noexcept
 	{
-		if (end_iterator.element_pointer == nullptr) // empty hive
-		{
-			return;
-		}
+		if (end_iterator.element_pointer == nullptr) return; // empty hive
 
 		while(unused_groups_head != nullptr)
 		{
@@ -2827,10 +2789,7 @@ public:
 	{
 		const size_type capacity_difference = total_capacity - capacity_retain;
 
-		if (end_iterator.element_pointer == nullptr || total_capacity <= capacity_retain || total_size >= capacity_retain || capacity_difference < min_block_capacity)
-		{
-			return;
-		}
+		if (end_iterator.element_pointer == nullptr || total_capacity <= capacity_retain || total_size >= capacity_retain || capacity_difference < min_block_capacity) return;
 
 		size_type number_of_elements_to_remove = capacity_difference;
 
@@ -2898,10 +2857,7 @@ public:
 
 	void reserve(size_type new_capacity)
 	{
-		if (new_capacity == 0 || new_capacity <= total_capacity) // We already have enough space allocated
-		{
-			return;
-		}
+		if (new_capacity == 0 || new_capacity <= total_capacity) return; // We already have enough space allocated
 
 		if (new_capacity > max_size())
 		{
@@ -2949,11 +2905,7 @@ public:
 		}
 		else // Non-empty hive, add first group:
 		{
-			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1))
-			{
-				reset_group_numbers();
-			}
-
+			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1)) reset_group_numbers();
 			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
 			total_capacity += remainder;
 		}
@@ -3058,10 +3010,7 @@ public:
 
 		assert(&source != this);
 
-		if (source.total_size == 0)
-		{
-			return;
-		}
+		if (source.total_size == 0) return;
 
 		// Throw if incompatible block capacities found in source:
 		if (source.min_block_capacity > max_block_capacity || source.max_block_capacity < min_block_capacity) // ie. source blocks cannot possibly fit within *this's block capacity limits
@@ -3141,12 +3090,7 @@ public:
 					else
 					{
 						end_iterator.group_pointer->erasures_list_next_group = erasure_groups_head; // add it to the groups-with-erasures free list
-
-						if (erasure_groups_head != nullptr)
-						{
-							erasure_groups_head->erasures_list_previous_group = end_iterator.group_pointer;
-						}
-
+						if (erasure_groups_head != nullptr) erasure_groups_head->erasures_list_previous_group = end_iterator.group_pointer;
 						erasure_groups_head = end_iterator.group_pointer;
 					}
 
@@ -3313,10 +3257,7 @@ public:
 	template <class comparison_function>
 	void sort(comparison_function compare)
 	{
-		if (total_size < 2)
-		{
-			return;
-		}
+		if (total_size < 2) return;
 
 		if constexpr ((std::is_trivially_copyable<element_type>::value || std::is_move_assignable<element_type>::value) && sizeof(element_type) <= sizeof(pointer) * 2) // If element is <= 2 pointers, just copy to an array and sort that then copy back - consumes less memory and may be faster
 		{
@@ -3428,10 +3369,7 @@ public:
 	template <class comparison_function>
 	size_type unique(comparison_function compare)
 	{
-		if (total_size < 2)
-		{
-			return 0;
-		}
+		if (total_size < 2) return 0;
 
 		size_type count = 0;
 		const const_iterator end = end_iterator;
@@ -3837,11 +3775,7 @@ public:
 
 				// Note: incrementing element_pointer is avoided until necessary to avoid needless calculations.
 
-				if (group_pointer->next_group == nullptr && element_pointer == pointer_cast<aligned_pointer_type>(group_pointer->skipfield)) // Check if we're already beyond back of final block
-				{
-					return;
-				}
-
+				if (group_pointer->next_group == nullptr && element_pointer == pointer_cast<aligned_pointer_type>(group_pointer->skipfield)) return; // Check if we're already beyond back of final block
 
 				// Special case for initial element pointer and initial group (we don't know how far into the group the element pointer is)
 				if (element_pointer != group_pointer->elements + *(group_pointer->skipfield))  // ie. != first non-erased element in group - otherwise we skip this section and just treat the first block as we would an intermediary block
@@ -3949,11 +3883,7 @@ public:
 			else if (distance < 0)
 			{
 				// Code logic is very similar to += above
-				if(group_pointer->previous_group == nullptr && element_pointer == group_pointer->elements + *(group_pointer->skipfield)) // check if we're already at begin()
-				{
-					return;
-				}
-
+				if(group_pointer->previous_group == nullptr && element_pointer == group_pointer->elements + *(group_pointer->skipfield)) return; // check if we're already at begin()
 				distance = -distance;
 
 				// Special case for initial element pointer and initial group (we don't know how far into the group the element pointer is)
@@ -4062,10 +3992,7 @@ public:
 
 			assert(!(group_pointer == nullptr) && !(last.group_pointer == nullptr));  // Check that they are both initialized
 
-			if (last.element_pointer == element_pointer)
-			{
-				return 0;
-			}
+			if (last.element_pointer == element_pointer) return 0;
 
 			difference_type distance = 0;
 			hive_iterator iterator1 = *this, iterator2 = last;
@@ -4434,10 +4361,7 @@ public:
 
 			if (distance > 0)
 			{
-				if (group_pointer->previous_group == nullptr && element_pointer == group_pointer->elements - 1) // Check if we're already at rend()
-				{
-					return;
-				}
+				if (group_pointer->previous_group == nullptr && element_pointer == group_pointer->elements - 1) return; // Check if we're already at rend()
 
 				if (group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max())
 				{
@@ -4577,10 +4501,7 @@ public:
 							}
 						}
 
-						if (group_pointer->next_group == nullptr)
-						{
-							return;
-						}
+						if (group_pointer->next_group == nullptr) return;
 					}
 
 					group_pointer = group_pointer->next_group;
