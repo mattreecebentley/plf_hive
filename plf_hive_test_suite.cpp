@@ -7,6 +7,7 @@
 #include <cstdio> // log redirection, printf
 #include <cstdlib> // abort
 #include <utility> // std::move
+#include <ranges>
 
 #include "plf_hive.h"
 
@@ -81,7 +82,7 @@ struct small_struct
 	bool operator < (const small_struct &source) const noexcept { return number < source.number; };
 	bool operator >= (const small_struct &source) const noexcept { return number >= source.number; };
 	bool operator <= (const small_struct &source) const noexcept { return number <= source.number; };
-	
+
 	small_struct(const unsigned int num) noexcept: number(num) {};
 };
 
@@ -684,7 +685,13 @@ int main()
 			failpass("Advance + iterator-to-index test", index == 20);
 
 			i_hive.erase(temp_iterator);
+
+			failpass("get_iterator test 1", i_hive.get_iterator(&(*temp_iterator)) == i_hive.end());
+
 			temp_iterator = i_hive.begin(); // Check edge-case with advance when erasures present in initial group
+
+			failpass("get_iterator test 2", i_hive.get_iterator(&(*temp_iterator)) == temp_iterator);
+
 			std::advance(temp_iterator, 500);
 
 			index = static_cast<unsigned int>(std::distance(i_hive.begin(), temp_iterator));
@@ -710,9 +717,14 @@ int main()
 
 			failpass("Total erase test", i_hive.empty());
 
+			// Test get_iterator etc on an empty hive with empty memory blocks retained:
+  			failpass("get_iterator test 3", i_hive.get_iterator(&(*temp_iterator)) == i_hive.end());
 
-			i_hive.clear();
 			i_hive.trim_capacity();
+
+			// Test get_iterator etc on a hive with no blocks:
+  			failpass("get_iterator test 4", i_hive.get_iterator(&(*temp_iterator)) == i_hive.end());
+
 			i_hive.reshape(plf::hive_limits(3, i_hive.block_capacity_limits().max));
 
 			const unsigned int temp_capacity2 = static_cast<unsigned int>(i_hive.capacity());

@@ -2945,24 +2945,27 @@ private:
 	template <bool is_const>
 	hive_iterator<is_const> get_it(const pointer element_pointer) const noexcept
 	{
-		const aligned_pointer_type aligned_element_pointer = pointer_cast<aligned_pointer_type>(element_pointer);
-
-		// Note: we start with checking the back group first, as it will be the largest group in most cases, so there's a statistically-higher chance of the element being within it.
-		// Special case for back group in case the element was in a group which became empty and got moved to the unused_groups list or was deallocated, and then that memory was re-used (ie. it became the current back group). The following line prevents the function from mistakenly returning an iterator which is beyond the back element of the colony:
-		group_pointer_type current_group = end_iterator.group_pointer;
-		aligned_pointer_type end = end_iterator.element_pointer;
-
-		while (true)
+		if (end_iterator.group_pointer != NULL)
 		{
-			if (std::greater_equal()(aligned_element_pointer, current_group->elements) && std::less()(aligned_element_pointer, end))
+			const aligned_pointer_type aligned_element_pointer = pointer_cast<aligned_pointer_type>(element_pointer);
+			// Note: we start with checking the back group first, as it will be the largest group in most cases, so there's a statistically-higher chance of the element being within it.
+
+			// Special case for back group in case the element was in a group which became empty and got moved to the unused_groups list or was deallocated, and then that memory was re-used (ie. it became the current back group). The following prevents the function from mistakenly returning an iterator which is beyond the back element of the colony:
+			if (std::greater_equal()(aligned_element_pointer, end_iterator.group_pointer->elements) && std::less()(aligned_element_pointer, end_iterator.element_pointer))
 			{
-				const skipfield_pointer_type skipfield_pointer = current_group->skipfield + (aligned_element_pointer - current_group->elements);
-				return (*skipfield_pointer == 0) ? hive_iterator<is_const>(current_group, aligned_element_pointer, skipfield_pointer) : hive_iterator<is_const>(end_iterator);
+				const skipfield_pointer_type skipfield_pointer = end_iterator.group_pointer->skipfield + (aligned_element_pointer - end_iterator.group_pointer->elements);
+				return (*skipfield_pointer == 0) ? hive_iterator<is_const>(end_iterator.group_pointer, aligned_element_pointer, skipfield_pointer) : end_iterator;
 			}
 
-			current_group = current_group->previous_group;
-			if (current_group == nullptr) break;
-			end = pointer_cast<aligned_pointer_type>(current_group->skipfield);
+			// All other groups, if any exist:
+			for (group_pointer_type current_group = end_iterator.group_pointer->previous_group; current_group != NULL; current_group = current_group->previous_group)
+			{
+				if (std::greater_equal()(aligned_element_pointer, current_group->elements) && std::less()(aligned_element_pointer, pointer_cast<aligned_pointer_type>(current_group->skipfield)))
+				{
+					const skipfield_pointer_type skipfield_pointer = current_group->skipfield + (aligned_element_pointer - current_group->elements);
+					return (*skipfield_pointer == 0) ? hive_iterator<is_const>(current_group, aligned_element_pointer, skipfield_pointer) : end_iterator;
+				}
+			}
 		}
 
 		return end_iterator;
