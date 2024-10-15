@@ -225,7 +225,7 @@ private:
 	{
 		skipfield_pointer_type		skipfield;			// Skipfield storage. The element and skipfield arrays are allocated contiguously, in a single allocation, in this implementation, hence the skipfield pointer also functions as a 'one-past-end' pointer for the elements array. There will always be one additional skipfield node allocated compared to the number of elements. This is to ensure a faster ++ iterator operation (fewer checks are required when this is present). The extra node is unused and always zero, but checked, and not having it will result in out-of-bounds memory errors. This is present before elements in the group struct as it is referenced constantly by the ++ operator, hence having it first results in a minor performance increase.
 		group_pointer_type			next_group;			// Next group in the linked list of all groups. nullptr if no following group. 2nd in struct because it is so frequently used during iteration.
-		aligned_pointer_type const  elements;			// Element storage.
+		const aligned_pointer_type	elements;			// Element storage.
 		group_pointer_type			previous_group;		// Previous group in the linked list of all groups. nullptr if no preceding group.
 		skipfield_type 				free_list_head;		// The index of the last erased element in the group. The last erased element will, in turn, contain the number of the index of the next erased element, and so on. If this is == maximum skipfield_type value then free_list is empty ie. no erasures have occurred in the group (or if they have, the erased locations have subsequently been reused via insert/emplace/assign).
 		const skipfield_type 		capacity;			// The element capacity of this particular group - can also be calculated from reinterpret_cast<aligned_pointer_type>(group->skipfield) - group->elements, however this space is effectively free due to struct padding and the sizeof(skipfield_type), and calculating it once is faster in benchmarking.
@@ -235,7 +235,7 @@ private:
 
 
 
-		group(aligned_struct_allocator_type &aligned_struct_allocator, const skipfield_type elements_per_group, group_pointer_type const previous):
+		group(aligned_struct_allocator_type &aligned_struct_allocator, const skipfield_type elements_per_group, const group_pointer_type previous):
 			next_group(nullptr),
 			elements(pointer_cast<aligned_pointer_type>(std::allocator_traits<aligned_struct_allocator_type>::allocate(aligned_struct_allocator, get_aligned_block_capacity(elements_per_group), (previous == nullptr) ? 0 : previous->elements))),
 			previous_group(previous),
@@ -691,9 +691,9 @@ public:
 
 private:
 
-	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, group_pointer_type const previous = nullptr)
+	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, const group_pointer_type previous = nullptr)
 	{
-		group_pointer_type const new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
+		const group_pointer_type new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
 
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			try
@@ -715,7 +715,7 @@ private:
 
 
 
-	void deallocate_group(group_pointer_type const the_group) noexcept
+	void deallocate_group(const group_pointer_type the_group) noexcept
 	{
 		std::allocator_traits<aligned_struct_allocator_type>::deallocate(aligned_struct_allocator, pointer_cast<aligned_struct_pointer_type>(the_group->elements), get_aligned_block_capacity(the_group->capacity));
 		std::allocator_traits<group_allocator_type>::deallocate(group_allocator, the_group, 1);
@@ -795,7 +795,7 @@ private:
 
 
 
-	void edit_free_list(skipfield_pointer_type const location, const skipfield_type value) noexcept
+	void edit_free_list(const skipfield_pointer_type location, const skipfield_type value) noexcept
 	{
  		std::allocator_traits<skipfield_allocator_type>::destroy(skipfield_allocator, location);
 		std::allocator_traits<skipfield_allocator_type>::construct(skipfield_allocator, location, value);
@@ -803,23 +803,23 @@ private:
 
 
 
-	void edit_free_list_prev(aligned_pointer_type const location, const skipfield_type value) noexcept // Write to the 'previous erased element' index in the erased element memory location
+	void edit_free_list_prev(const aligned_pointer_type location, const skipfield_type value) noexcept // Write to the 'previous erased element' index in the erased element memory location
 	{
 		edit_free_list(pointer_cast<skipfield_pointer_type>(location), value);
 	}
 
 
 
-	void edit_free_list_next(aligned_pointer_type const location, const skipfield_type value) noexcept // Ditto 'next'
+	void edit_free_list_next(const aligned_pointer_type location, const skipfield_type value) noexcept // Ditto 'next'
 	{
 		edit_free_list(pointer_cast<skipfield_pointer_type>(location) + 1, value);
 	}
 
 
 
-	void edit_free_list_head(aligned_pointer_type const location, const skipfield_type value) noexcept
+	void edit_free_list_head(const aligned_pointer_type location, const skipfield_type value) noexcept
 	{
-		skipfield_pointer_type const converted_location = pointer_cast<skipfield_pointer_type>(location);
+		const skipfield_pointer_type converted_location = pointer_cast<skipfield_pointer_type>(location);
 		edit_free_list(converted_location, value);
 		edit_free_list(converted_location + 1, std::numeric_limits<skipfield_type>::max());
 	}
@@ -900,14 +900,14 @@ private:
 
 	void reset_group_numbers_if_necessary() noexcept
 	{
-		if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max()) reset_group_numbers();
+		if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max()) [[unlikely]] reset_group_numbers();
 	}
 
 
 
 	group_pointer_type reuse_unused_group() noexcept
 	{
-		group_pointer_type const reused_group = unused_groups_head;
+		const group_pointer_type reused_group = unused_groups_head;
 		unused_groups_head = reused_group->next_group;
 		reset_group_numbers_if_necessary();
 		reused_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
@@ -917,7 +917,7 @@ private:
 
 
 	template<typename... arguments>
-	constexpr void construct_element(aligned_pointer_type const location, arguments &&... parameters)
+	constexpr void construct_element(const aligned_pointer_type location, arguments &&... parameters)
 	{
 		std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(location), std::forward<arguments>(parameters) ...);
 	}
@@ -1312,7 +1312,7 @@ private:
 
 
 	// For catch blocks in range_fill_skipblock and fill_skipblock
-	void recover_from_partial_skipblock_fill(aligned_pointer_type const location, const aligned_pointer_type current_location, skipfield_pointer_type const skipfield_pointer, const skipfield_type prev_free_list_node)
+	void recover_from_partial_skipblock_fill(const aligned_pointer_type location, const aligned_pointer_type current_location, const skipfield_pointer_type skipfield_pointer, const skipfield_type prev_free_list_node)
 	{
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen
@@ -1339,7 +1339,7 @@ private:
 
 
 
-	void fill_skipblock(const element_type &element, aligned_pointer_type const location, skipfield_pointer_type const skipfield_pointer, const skipfield_type size)
+	void fill_skipblock(const element_type &element, const aligned_pointer_type location, const skipfield_pointer_type skipfield_pointer, const skipfield_type size)
 	{
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
@@ -1440,8 +1440,8 @@ public:
 		// Use up erased locations if available:
 		while(erasure_groups_head != nullptr) // skipblock loop: breaks when hive is exhausted of reusable skipblocks, or returns if size == 0
 		{
-			aligned_pointer_type const element_pointer = erasure_groups_head->elements + erasure_groups_head->free_list_head;
-			skipfield_pointer_type const skipfield_pointer = erasure_groups_head->skipfield + erasure_groups_head->free_list_head;
+			const aligned_pointer_type element_pointer = erasure_groups_head->elements + erasure_groups_head->free_list_head;
+			const skipfield_pointer_type skipfield_pointer = erasure_groups_head->skipfield + erasure_groups_head->free_list_head;
 			const skipfield_type skipblock_size = *skipfield_pointer;
 
 			if (erasure_groups_head == begin_iterator.group_pointer && element_pointer < begin_iterator.element_pointer)
@@ -1512,7 +1512,7 @@ public:
 
 		// Use unused groups:
 		end_iterator.group_pointer->next_group = unused_groups_head;
-		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) reset_group_numbers();
+		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) [[unlikely]] reset_group_numbers();
 		fill_unused_groups(size, element, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
@@ -1572,7 +1572,7 @@ private:
 
 
 	template <class iterator_type>
-	iterator_type range_fill_skipblock(iterator_type it, aligned_pointer_type const location, skipfield_pointer_type const skipfield_pointer, const skipfield_type size)
+	iterator_type range_fill_skipblock(iterator_type it, const aligned_pointer_type location, const skipfield_pointer_type skipfield_pointer, const skipfield_type size)
 	{
 		const aligned_pointer_type fill_end = location + size;
 
@@ -1673,8 +1673,8 @@ private:
 
 		while(erasure_groups_head != nullptr)
 		{
-			aligned_pointer_type const element_pointer = erasure_groups_head->elements + erasure_groups_head->free_list_head;
-			skipfield_pointer_type const skipfield_pointer = erasure_groups_head->skipfield + erasure_groups_head->free_list_head;
+			const aligned_pointer_type element_pointer = erasure_groups_head->elements + erasure_groups_head->free_list_head;
+			const skipfield_pointer_type skipfield_pointer = erasure_groups_head->skipfield + erasure_groups_head->free_list_head;
 			const skipfield_type skipblock_size = *skipfield_pointer;
 
 			if (erasure_groups_head == begin_iterator.group_pointer && element_pointer < begin_iterator.element_pointer)
@@ -1738,7 +1738,7 @@ private:
 
 
 		end_iterator.group_pointer->next_group = unused_groups_head;
-		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) reset_group_numbers();
+		if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < size) [[unlikely]] reset_group_numbers();
 		range_fill_unused_groups(size, it, end_iterator.group_pointer->group_number + 1u, end_iterator.group_pointer, unused_groups_head);
 	}
 
@@ -1805,7 +1805,7 @@ private:
 
 
 
-	void reset_only_group_left(group_pointer_type const group_pointer) noexcept
+	void reset_only_group_left(const group_pointer_type group_pointer) noexcept
 	{
 		erasure_groups_head = nullptr;
 		group_pointer->reset(0, nullptr, nullptr, 0);
@@ -1990,7 +1990,7 @@ public:
 		else if (!(in_back_block | in_front_block)) // this is a non-first group but not final group in chain: delete the group, then link previous group to the next group in the chain:
 		{
 			it.group_pointer->next_group->previous_group = it.group_pointer->previous_group;
-			group_pointer_type const return_group = it.group_pointer->previous_group->next_group = it.group_pointer->next_group; // close the chain, removing this group from it
+			const group_pointer_type return_group = it.group_pointer->previous_group->next_group = it.group_pointer->next_group; // close the chain, removing this group from it
 
 			if (it.group_pointer->free_list_head != std::numeric_limits<skipfield_type>::max())
 			{
@@ -2905,7 +2905,7 @@ public:
 		}
 		else // Non-empty hive, add first group:
 		{
-			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1)) reset_group_numbers();
+			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1)) [[unlikely]] reset_group_numbers();
 			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
 			total_capacity += remainder;
 		}
@@ -3134,7 +3134,7 @@ public:
 				{
 					update_subsequent_group_numbers(end_iterator.group_pointer->group_number + 1u, source.begin_iterator.group_pointer);
 				}
-				else
+				else [[unlikely]]
 				{
 					reset_group_numbers();
 				}
@@ -3168,7 +3168,7 @@ public:
 
 
 		// Reset source values:
-		group_pointer_type const original_unused_groups_head = source.unused_groups_head; // grab value before it gets wiped
+		const group_pointer_type original_unused_groups_head = source.unused_groups_head; // grab value before it gets wiped
 		source.blank(); // blank source before adding capacity from unused groups back in
 
 		if (original_unused_groups_head != nullptr) // If there were unused groups in source, re-link them and remove their capacity count from *this while adding it to source:
