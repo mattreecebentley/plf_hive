@@ -119,7 +119,7 @@ namespace plf
 struct hive_limits // for use in block_capacity setting/getting functions and constructors
 {
 	size_t min, max;
-	constexpr hive_limits(const size_t minimum, const size_t maximum) noexcept : min(minimum), max(maximum) {}
+	hive_limits(const size_t minimum, const size_t maximum) noexcept : min(minimum), max(maximum) {}
 };
 
 
@@ -283,6 +283,13 @@ private:
 
 
 
+	static constexpr size_t max_size_static() noexcept
+	{
+		return static_cast<size_t>(std::allocator_traits<allocator_type>::max_size(allocator_type()));
+	}
+
+
+
 	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
 	static constexpr skipfield_type default_min_block_capacity() noexcept
 	{
@@ -296,21 +303,14 @@ private:
 	// Adaptive maximum based on numeric_limits and best outcome from multiple benchmark's (on balance) in terms of memory usage and performance:
 	static constexpr skipfield_type default_max_block_capacity() noexcept
 	{
-		return static_cast<skipfield_type>(std::min(static_cast<unsigned int>(std::numeric_limits<skipfield_type>::max()), 8192u));
-	}
-
-
-
-	static constexpr hive_limits default_block_capacity_limits() noexcept
-	{
-		return hive_limits(static_cast<size_t>(default_min_block_capacity()), static_cast<size_t>(default_max_block_capacity()));
+		return static_cast<skipfield_type>(std::min(std::min(static_cast<size_t>(std::numeric_limits<skipfield_type>::max()), static_cast<size_t>(8192u)), max_size_static()));
 	}
 
 
 
 	void check_capacities_conformance(const hive_limits capacities) const
 	{
-		constexpr hive_limits hard_capacities = block_capacity_hard_limits();
+		hive_limits hard_capacities = block_capacity_hard_limits();
 
 		if (capacities.min < hard_capacities.min || capacities.min > capacities.max || capacities.max > hard_capacities.max)
 		{
@@ -349,9 +349,17 @@ private:
 
 public:
 
+
+	static constexpr hive_limits block_capacity_default_limits() noexcept
+	{
+		return hive_limits(static_cast<size_t>(default_min_block_capacity()), static_cast<size_t>(default_max_block_capacity()));
+	}
+
+
+
 	// Default constructors:
 
-	explicit hive(const allocator_type &alloc) noexcept:
+	constexpr explicit hive(const allocator_type &alloc) noexcept:
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
 		unused_groups_head(nullptr),
@@ -373,7 +381,7 @@ public:
 
 
 
-	hive(const hive_limits block_limits, const allocator_type &alloc):
+	constexpr hive(const hive_limits block_limits, const allocator_type &alloc):
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
 		unused_groups_head(nullptr),
@@ -391,7 +399,7 @@ public:
 
 
 
-	explicit hive(const hive_limits block_limits):
+	constexpr explicit hive(const hive_limits block_limits):
 		hive(block_limits, allocator_type())
 	{}
 
@@ -489,7 +497,7 @@ public:
 
 
 	hive(const size_type fill_number, const element_type &element, const allocator_type &alloc = allocator_type()) :
-		hive(fill_number, element, default_block_capacity_limits(), alloc)
+		hive(fill_number, element, block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -503,7 +511,7 @@ public:
 
 
 	hive(const size_type fill_number, const allocator_type &alloc = allocator_type()):
-		hive(fill_number, element_type(), default_block_capacity_limits(), alloc)
+		hive(fill_number, element_type(), block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -532,7 +540,7 @@ public:
 
 	template<typename iterator_type>
 	hive(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last, const allocator_type &alloc = allocator_type()):
-		hive(first, last, default_block_capacity_limits(), alloc)
+		hive(first, last, block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -559,7 +567,7 @@ public:
 
 
 	hive(const std::initializer_list<element_type> &element_list, const allocator_type &alloc = allocator_type()):
-		hive(element_list, default_block_capacity_limits(), alloc)
+		hive(element_list, block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -590,7 +598,7 @@ public:
 	template<class range_type>
 		requires std::ranges::range<range_type>
 	hive(plf::ranges::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
-		hive(plf::ranges::from_range, std::move(rg), default_block_capacity_limits(), alloc)
+		hive(plf::ranges::from_range, std::move(rg), block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -2624,7 +2632,7 @@ public:
 
 
 
-	hive_limits block_capacity_limits() const noexcept
+	constexpr hive_limits block_capacity_limits() const noexcept
 	{
 		return hive_limits(static_cast<size_t>(min_block_capacity), static_cast<size_t>(max_block_capacity));
 	}
@@ -2633,7 +2641,7 @@ public:
 
 	static constexpr hive_limits block_capacity_hard_limits() noexcept
 	{
-		return hive_limits(3, std::numeric_limits<skipfield_type>::max());
+		return hive_limits(3, std::min(static_cast<size_t>(std::numeric_limits<skipfield_type>::max()), max_size_static()));
 	}
 
 
@@ -2729,6 +2737,15 @@ public:
 		}
 		else // Allocator isn't movable so move elements from source and deallocate the source's blocks:
 		{
+			const hive_limits hard_limits = block_capacity_hard_limits();
+
+			if (source.min_block_capacity >= hard_limits.min && source.max_block_capacity <= hard_limits.max)
+			{
+				if (source.min_block_capacity < min_block_capacity || source.max_block_capacity > max_block_capacity) reset();
+				min_block_capacity = source.min_block_capacity;
+				max_block_capacity = source.max_block_capacity;
+			}
+
 			range_assign(std::make_move_iterator(source.begin_iterator), source.total_size);
 			source.destroy_all_data();
 		}
