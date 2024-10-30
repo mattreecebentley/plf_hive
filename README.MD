@@ -8,7 +8,7 @@ The differences in plf::hive are as follows:
 * memory() removed as this was considered to be not in-keeping with previous container practice.
 * No support for user-specified internal sort routines to be used by member function sort().
 * advance, prev, next and distance are std:: overloads, rather than hidden friends selected via ADL. This is only possible under C++20 and above. std::distance overload doesn't support negative distances, the two iterators must be swapped prior to distance call if first is > last.
-* The following public functions are removed: is_active, default_min_block_capacity, default_max_block_capacity, default_block_capacity_limits, block_metadata_memory, block_allocation_amount, max_elements_per_allocation.
+* The following public functions are removed: is_active, block_capacity_default_min(), block_capacity_default_max(), block_metadata_memory, block_allocation_amount, max_elements_per_allocation.
 
 Otherwise hive should follow the same rules as colony and be used in the same way. Colony documentation is here:
 https://plflib.org/colony.htm
