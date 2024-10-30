@@ -270,10 +270,10 @@ private:
 
 	// Hive member variables:
 
-	iterator 			end_iterator, begin_iterator;
+	iterator 				end_iterator, begin_iterator;
 	group_pointer_type	erasure_groups_head,	// Head of doubly-linked list of groups which have erased-element memory locations available for re-use
-						unused_groups_head;	// Head of singly-linked list of reserved groups retained by erase()/clear() or created by reserve()
-	size_type			total_size, total_capacity;
+								unused_groups_head;	// Head of singly-linked list of reserved groups retained by erase()/clear() or created by reserve()
+	size_type				total_size, total_capacity;
 	skipfield_type 		min_block_capacity, max_block_capacity;
 
 	group_allocator_type group_allocator;
@@ -2057,9 +2057,17 @@ public:
 
 				// Schema: first erase all non-erased elements until end of group & remove all skipblocks post-iterator1 from the free_list. Then, either update preceding skipblock or create new one:
 
-				if (std::is_trivially_destructible<element_type>::value && current.group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max())
+				if (current.group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // ie. no other erasures in block
 				{
 					number_of_group_erasures += static_cast<size_type>(end - current.element_pointer);
+
+					if constexpr (!std::is_trivially_destructible<element_type>::value)
+					{
+						do // Avoid checking skipfield for rest of elements in group, as there are no skipped elements
+						{
+							destroy_element(current.element_pointer);
+						} while (++current.element_pointer != end);
+					}
 				}
 				else
 				{
@@ -2233,9 +2241,17 @@ public:
 
 				const const_iterator current_saved = current;
 
-				if (std::is_trivially_destructible<element_type>::value && current.group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max())
+				if (current.group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // ie. no other erasures in block
 				{
 					number_of_group_erasures += static_cast<size_type>(iterator2.element_pointer - current.element_pointer);
+
+					if constexpr (!std::is_trivially_destructible<element_type>::value)
+					{
+						do // avoid checking skipfield
+						{
+							destroy_element(current.element_pointer);
+						} while (++current.element_pointer != iterator2.element_pointer);
+					}
 				}
 				else
 				{
