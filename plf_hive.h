@@ -3623,7 +3623,7 @@ public:
 
 
 		template <bool is_const_it = is_const, class = std::enable_if_t<is_const_it> >
-		hive_iterator & operator = (const hive_iterator<false> &&source) noexcept
+		hive_iterator & operator = (hive_iterator<false> &&source) noexcept
 		{
 			group_pointer = std::move(source.group_pointer);
 			element_pointer = std::move(source.element_pointer);
