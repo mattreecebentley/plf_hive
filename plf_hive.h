@@ -3288,8 +3288,8 @@ private:
 
 public:
 
-	template <class comparison_function>
-	void sort(comparison_function compare)
+	template <class comparison_function = std::less<element_type>>
+	void sort(comparison_function compare = comparison_function())
 	{
 		if (total_size < 2) return;
 
@@ -3324,7 +3324,7 @@ public:
 			{
 				std::copy(sort_array, end, begin_iterator);
 
-				if (!std::is_trivially_destructible<element_type>::value)
+				if constexpr (!std::is_trivially_destructible<element_type>::value)
 				{
 					for (pointer current = sort_array; current != end; ++current)
 					{
@@ -3393,15 +3393,9 @@ public:
 
 
 
-	void sort()
-	{
-		sort(std::less<element_type>());
-	}
 
-
-
-	template <class comparison_function>
-	size_type unique(comparison_function compare)
+	template <class comparison_function = std::equal_to<element_type>>
+	size_type unique(comparison_function compare = comparison_function())
 	{
 		if (total_size < 2) return 0;
 
@@ -3436,12 +3430,6 @@ public:
 		return count;
 	}
 
-
-
-	size_type unique()
-	{
-		return unique(std::equal_to<element_type>());
-	}
 
 
 
