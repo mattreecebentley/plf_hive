@@ -1039,7 +1039,7 @@ public:
 
 
 
-	iterator insert([[maybe_unused]] const_iterator hint, const element_type &element) // Note: hint is ignored, purely to serve other standard library functions
+	iterator insert([[maybe_unused]] const_iterator hint, const element_type &element) // Note: hint is ignored, purely to serve other standard library functions like insert_iterator
 	{
 		return insert(element);
 	}
@@ -1150,9 +1150,9 @@ public:
 
 
 
-	iterator insert([[maybe_unused]] const_iterator hint, element_type &&element) // Note: hint is ignored, purely to serve other standard library functions
+	iterator insert([[maybe_unused]] const_iterator hint, element_type &&element)
 	{
-		return insert(std::forward<element_type>(element));
+		return insert(std::forward<element_type &&>(element));
 	}
 
 
