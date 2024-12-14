@@ -436,20 +436,32 @@ public:
 
 	hive(hive &&source, const std::type_identity_t<allocator_type> &alloc):
 		allocator_type(alloc),
-		end_iterator(std::move(source.end_iterator)),
-		begin_iterator(std::move(source.begin_iterator)),
-		erasure_groups_head(std::move(source.erasure_groups_head)),
-		unused_groups_head(std::move(source.unused_groups_head)),
+		end_iterator(source.end_iterator),
+		begin_iterator(source.begin_iterator),
+		erasure_groups_head(source.erasure_groups_head),
+		unused_groups_head(source.unused_groups_head),
 		total_size(source.total_size),
 		total_capacity(source.total_capacity),
 		min_block_capacity(source.min_block_capacity),
 		max_block_capacity(source.max_block_capacity),
-		group_allocator(*this),
-		aligned_struct_allocator(*this),
-		skipfield_allocator(*this),
-		tuple_allocator(*this)
+		group_allocator(alloc),
+		aligned_struct_allocator(alloc),
+		skipfield_allocator(alloc),
+		tuple_allocator(alloc)
 	{
 		assert(&source != this);
+
+		if constexpr (!std::allocator_traits<allocator_type>::is_always_equal::value)
+		{
+			if (alloc != static_cast<allocator_type &>(source))
+			{
+				blank();
+				static_cast<allocator_type &>(*this) = static_cast<allocator_type &>(source);
+				range_assign(std::make_move_iterator(source.begin_iterator), source.total_size);
+				source.destroy_all_data();
+			}
+		}
+
 		source.blank();
 	}
 
@@ -1045,7 +1057,7 @@ public:
 	}
 
 
-	
+
 	iterator insert(element_type &&element) // The move-insert function is near-identical to the regular insert function, with the exception of the element construction method and is_nothrow tests.
 	{
 		if (end_iterator.element_pointer != nullptr)
@@ -2717,14 +2729,15 @@ public:
 
 		if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_copy_assignment::value)
 		{
-			allocator_type source_allocator(source);
-
-			if(!std::allocator_traits<allocator_type>::is_always_equal::value && static_cast<allocator_type &>(*this) != source_allocator)
+			if constexpr (!std::allocator_traits<allocator_type>::is_always_equal::value)
 			{ // Deallocate existing blocks as source allocator is not necessarily able to do so
-				reset();
+				if (static_cast<allocator_type &>(*this) != static_cast<allocator_type &>(source))
+				{
+					reset();
+				}
 			}
 
-			static_cast<allocator_type &>(*this) = std::move(source_allocator);
+			static_cast<allocator_type &>(*this) = static_cast<allocator_type &>(source);
 			// Reconstruct rebinds:
 			group_allocator = group_allocator_type(*this);
 			aligned_struct_allocator = aligned_struct_allocator_type(*this);
