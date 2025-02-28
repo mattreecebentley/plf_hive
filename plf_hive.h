@@ -1,4 +1,4 @@
-// Copyright (c) 2024, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
+// Copyright (c) 2025, Matthew Bentley (mattreecebentley@gmail.com) www.plflib.org
 
 // zLib license (https://www.zlib.net/zlib_license.html):
 // This software is provided 'as-is', without any express or implied
@@ -31,7 +31,7 @@
 #endif
 
 #if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
-	 // Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
+	// Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
 	#pragma warning ( push )
 	#pragma warning ( disable : 4127 )
 #endif
@@ -2731,13 +2731,13 @@ public:
 		{
 			if constexpr (!std::allocator_traits<allocator_type>::is_always_equal::value)
 			{ // Deallocate existing blocks as source allocator is not necessarily able to do so
-				if (static_cast<allocator_type &>(*this) != static_cast<allocator_type &>(source))
+				if (static_cast<allocator_type &>(*this) != static_cast<const allocator_type &>(source))
 				{
 					reset();
 				}
 			}
 
-			static_cast<allocator_type &>(*this) = static_cast<allocator_type &>(source);
+			static_cast<allocator_type &>(*this) = static_cast<const allocator_type &>(source);
 			// Reconstruct rebinds:
 			group_allocator = group_allocator_type(*this);
 			aligned_struct_allocator = aligned_struct_allocator_type(*this);
@@ -2751,43 +2751,67 @@ public:
 
 
 
+private:
+
+	void move_assign(hive &&source) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value)
+	{
+		if constexpr ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
+			std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
+		{
+			std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
+		}
+		else
+		{
+			end_iterator = std::move(source.end_iterator);
+			begin_iterator = std::move(source.begin_iterator);
+			erasure_groups_head = std::move(source.erasure_groups_head);
+			unused_groups_head =  std::move(source.unused_groups_head);
+			total_size = source.total_size;
+			total_capacity = source.total_capacity;
+			min_block_capacity = source.min_block_capacity;
+			max_block_capacity = source.max_block_capacity;
+
+			if constexpr(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
+			{
+				static_cast<allocator_type &>(*this) = std::move(static_cast<allocator_type &>(source));
+				// Reconstruct rebinds:
+				group_allocator = group_allocator_type(*this);
+				aligned_struct_allocator = aligned_struct_allocator_type(*this);
+				skipfield_allocator = skipfield_allocator_type(*this);
+				tuple_allocator = tuple_allocator_type(*this);
+			}
+		}
+	}
+
+
+
+public:
+
 	// Move assignment
 	hive & operator = (hive &&source) noexcept(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 	{
 		assert(&source != this);
 		destroy_all_data();
 
-		if (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value || static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
+		if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value)
 		{
-			if constexpr ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
-				std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
+			move_assign(std::move(source));
+		}
+		else if (static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
+		{
+			move_assign(std::move(source));
+		}
+		else // Allocator isn't movable so move/copy elements from source and deallocate the source's blocks:
+		{
+			if constexpr (!std::is_move_constructible<element_type>::value)
 			{
-				std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
+				range_insert(end_iterator, source.total_size, source.begin_iterator);
 			}
 			else
 			{
-				end_iterator = std::move(source.end_iterator);
-				begin_iterator = std::move(source.begin_iterator);
-				erasure_groups_head = std::move(source.erasure_groups_head);
-				unused_groups_head =  std::move(source.unused_groups_head);
-				total_size = source.total_size;
-				total_capacity = source.total_capacity;
-				min_block_capacity = source.min_block_capacity;
-				max_block_capacity = source.max_block_capacity;
-
-				if constexpr(std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value)
-				{
-					static_cast<allocator_type &>(*this) = std::move(static_cast<allocator_type &>(source));
-					// Reconstruct rebinds:
-					group_allocator = group_allocator_type(*this);
-					aligned_struct_allocator = aligned_struct_allocator_type(*this);
-					skipfield_allocator = skipfield_allocator_type(*this);
-					tuple_allocator = tuple_allocator_type(*this);
-				}
+				range_insert(end_iterator, source.total_size, std::make_move_iterator(source.begin_iterator));
 			}
-		}
-		else // Allocator isn't movable so move elements from source and deallocate the source's blocks:
-		{
+
 			range_assign(std::make_move_iterator(source.begin_iterator), source.total_size);
 			source.destroy_all_data();
 		}
