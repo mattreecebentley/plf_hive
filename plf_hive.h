@@ -2522,7 +2522,12 @@ public:
 			return;
 		}
 
-		if constexpr (!(std::is_trivially_destructible<element_type>::value && std::is_trivially_constructible<element_type>::value) && std::is_copy_assignable<element_type>::value)
+		if constexpr ((std::is_trivially_destructible<element_type>::value && std::is_trivially_constructible<element_type>::value) || !std::is_copy_assignable<element_type>::value)
+		{
+			prepare_groups_for_assign(size);
+			fill_unused_groups(size, element, 0, nullptr, begin_iterator.group_pointer);
+		}
+		else
 		{
 			if (total_size == 0)
 			{
@@ -2552,11 +2557,6 @@ public:
 				insert(size - total_size, element);
 			}
 		}
-		else
-		{
-			prepare_groups_for_assign(size);
-			fill_unused_groups(size, element, 0, nullptr, begin_iterator.group_pointer);
-		}
 	}
 
 
@@ -2574,7 +2574,12 @@ private:
 			return;
 		}
 
-		if constexpr (!(std::is_trivially_destructible<element_type>::value && std::is_trivially_constructible<element_type>::value) && std::is_copy_assignable<element_type>::value)
+		if constexpr ((std::is_trivially_destructible<element_type>::value && std::is_trivially_constructible<element_type>::value) || !std::is_copy_assignable<element_type>::value)
+		{
+			prepare_groups_for_assign(size);
+			range_fill_unused_groups(size, it, 0, nullptr, begin_iterator.group_pointer);
+		}
+		else
 		{
 			if (total_size == 0)
 			{
@@ -2603,11 +2608,6 @@ private:
 
 				range_insert(it, size - total_size);
 			}
-		}
-		else
-		{
-			prepare_groups_for_assign(size);
-			range_fill_unused_groups(size, it, 0, nullptr, begin_iterator.group_pointer);
 		}
 	}
 
@@ -3136,7 +3136,7 @@ private:
 	template <bool is_const>
 	hive_iterator<is_const> get_it(const pointer element_pointer) const noexcept
 	{
-		if (end_iterator.group_pointer != NULL)
+		if (end_iterator.group_pointer != nullptr)
 		{
 			const aligned_pointer_type aligned_element_pointer = pointer_cast<aligned_pointer_type>(element_pointer);
 			// Note: we start with checking the back group first, as it will be the largest group in most cases, so there's a statistically-higher chance of the element being within it.
@@ -3149,7 +3149,7 @@ private:
 			}
 
 			// All other groups, if any exist:
-			for (group_pointer_type current_group = end_iterator.group_pointer->previous_group; current_group != NULL; current_group = current_group->previous_group)
+			for (group_pointer_type current_group = end_iterator.group_pointer->previous_group; current_group != nullptr; current_group = current_group->previous_group)
 			{
 				if (std::greater_equal()(aligned_element_pointer, current_group->elements) && std::less()(aligned_element_pointer, pointer_cast<aligned_pointer_type>(current_group->skipfield)))
 				{
