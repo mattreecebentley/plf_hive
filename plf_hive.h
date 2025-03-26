@@ -1596,11 +1596,11 @@ private:
 					{
 						if constexpr (std::is_copy_constructible<element_type>::value)
 						{
-							construct_element(end_iterator.element_pointer, std::move(*it++));
+							construct_element(end_iterator.element_pointer, *it++);
 						}
 						else
 						{
-							construct_element(end_iterator.element_pointer, *it++);
+							construct_element(end_iterator.element_pointer, std::move(*it++));
 						}
 					}
 					catch (...)
