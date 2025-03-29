@@ -1594,7 +1594,7 @@ private:
 				{
 					try
 					{
-						if constexpr (std::is_copy_constructible<element_type>::value)
+						if constexpr (!std::is_copy_constructible<element_type>::value)
 						{
 							construct_element(end_iterator.element_pointer, std::move(*it++));
 						}
@@ -1646,7 +1646,7 @@ private:
 				{
 					try
 					{
-						if constexpr (std::is_copy_constructible<element_type>::value)
+						if constexpr (!std::is_copy_constructible<element_type>::value)
 						{
 							construct_element(current_location, std::move(*it++));
 						}
