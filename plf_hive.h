@@ -189,7 +189,7 @@ private:
 	template <class destination_pointer_type, class source_pointer_type>
 	static constexpr destination_pointer_type pointer_cast(const source_pointer_type source_pointer) noexcept
 	{
-		if constexpr (std::is_trivial<destination_pointer_type>::value)
+		if constexpr (std::is_trivially_constructible<destination_pointer_type>::value)
 		{
 			return reinterpret_cast<destination_pointer_type>(std::to_address(source_pointer));
 		}
@@ -326,7 +326,7 @@ private:
 
 	void blank() noexcept
 	{
-		if constexpr (std::is_standard_layout<hive>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
+		if constexpr (std::is_standard_layout<hive>::value && std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivially_destructible<group_pointer_type>::value && std::is_trivially_destructible<aligned_pointer_type>::value && std::is_trivially_destructible<skipfield_pointer_type>::value)
 		{ // If all pointer types are trivial, we can just nuke the member variables from orbit with memset (nullptr is always 0):
 			std::memset(static_cast<void *>(this), 0, offsetof(hive, min_block_capacity));
 		}
@@ -2690,7 +2690,7 @@ private:
 		temp.reserve(total_size);
 		temp.end_iterator.group_pointer->next_group = temp.unused_groups_head;
 
-		if constexpr (!std::is_trivial<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
+		if constexpr (!std::is_trivially_copyable<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
 		{
 			temp.range_fill_unused_groups(total_size, std::make_move_iterator(begin_iterator), 0, nullptr, temp.begin_iterator.group_pointer);
 		}
@@ -2866,7 +2866,7 @@ private:
 		destroy_all_data();
 
 		if constexpr ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) &&
-			std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value)
+			std::is_trivially_copyable<group_pointer_type>::value && std::is_trivially_copyable<aligned_pointer_type>::value && std::is_trivially_copyable<skipfield_pointer_type>::value)
 		{
 			std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
 		}
@@ -3604,7 +3604,7 @@ public:
 	{
 		assert(&source != this);
 
-		if constexpr (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivial<group_pointer_type>::value && std::is_trivial<aligned_pointer_type>::value && std::is_trivial<skipfield_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
+		if constexpr (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivially_copyable<group_pointer_type>::value && std::is_trivially_copyable<aligned_pointer_type>::value && std::is_trivially_copyable<skipfield_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
 		{
 			char temp[sizeof(hive)];
 			std::memcpy(&temp, static_cast<void *>(this), sizeof(hive));
