@@ -3048,7 +3048,7 @@ public:
 
 	void reserve(size_type new_capacity)
 	{
-		if (new_capacity == 0 || new_capacity <= total_capacity) return; // We already have enough space allocated
+		if (new_capacity == 0 || new_capacity <= total_capacity) return; // ie. We already have enough space allocated
 
 		if (new_capacity > max_size())
 		{
@@ -3062,8 +3062,7 @@ public:
 		new_capacity -= total_capacity;
 
 		size_type number_of_max_groups = new_capacity / max_block_capacity;
-		skipfield_type remainder = static_cast<skipfield_type>(new_capacity - (number_of_max_groups * max_block_capacity));
-
+		skipfield_type remainder = static_cast<skipfield_type>(new_capacity - (number_of_max_groups * max_block_capacity)), negative_remainder = 0;
 
 		if (remainder == 0)
 		{
@@ -3072,13 +3071,25 @@ public:
 		}
 		else if (remainder < min_block_capacity)
 		{
+			// Note: negative_remainder is used to take the difference between the minimum block capacity limit and the actual remainder, and spread this negative difference over subsequent blocks which are in the usual case at max capacity.
+			negative_remainder = min_block_capacity - remainder;
 			remainder = min_block_capacity;
+
+  			// This line checks to see, if we have to reduce the size of the max-capacity blocks to spread the negative_remainder out, whether even reducing the max blocks to min capacity will be enough to keep the capacity under max_size(). We add 1 for the initial (remainder) block. This guards against situations where, for example, the min/max limits are very similar:
+			if (total_capacity + ((number_of_max_groups + 1) * min_block_capacity) > max_size())
+			{
+				#ifdef PLF_EXCEPTIONS_SUPPORT
+					throw std::length_error("Reserve cannot increase capacity to >= n without being > max_size() due to current capacity and block capacity limits");
+				#else
+					std::terminate();
+				#endif
+			}
 		}
 
 
 		group_pointer_type current_group, first_unused_group;
 
-		if (begin_iterator.group_pointer == nullptr) // Most common scenario - empty hive
+		if (begin_iterator.group_pointer == NULL) // Most common scenario - empty hive
 		{
 			initialize(remainder);
 			begin_iterator.group_pointer->size = 0; // 1 by default in initialize function (optimised for insert())
@@ -3089,14 +3100,24 @@ public:
 			}
 			else
 			{
-				first_unused_group = current_group = allocate_new_group(max_block_capacity, begin_iterator.group_pointer);
-				total_capacity += max_block_capacity;
+				const size_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
+				negative_remainder -= max_block_capacity - extra_capacity;
+
+				first_unused_group = current_group = allocate_new_group(extra_capacity, begin_iterator.group_pointer);
+				total_capacity += extra_capacity;
 				--number_of_max_groups;
 			}
 		}
 		else // Non-empty hive, add first group:
 		{
-			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1)) [[unlikely]] reset_group_numbers();
+			if ((std::numeric_limits<size_type>::max() - end_iterator.group_pointer->group_number) < (number_of_max_groups + 1))
+			#ifdef PLF_CPP20_SUPPORT
+				[[unlikely]]
+			#endif
+			{
+				reset_group_numbers();
+			}
+
 			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
 			total_capacity += remainder;
 		}
@@ -3104,24 +3125,26 @@ public:
 
 		while (number_of_max_groups != 0)
 		{
+			const size_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
+			negative_remainder -= max_block_capacity - extra_capacity;
+
 			#ifdef PLF_EXCEPTIONS_SUPPORT
 				try
 				{
-					current_group->next_group = allocate_new_group(max_block_capacity, current_group);
+					current_group->next_group = allocate_new_group(extra_capacity, current_group);
 				}
 				catch (...)
 				{
-					deallocate_group(current_group->next_group);
 					current_group->next_group = unused_groups_head;
 					unused_groups_head = first_unused_group;
 					throw;
 				}
 			#else
-				current_group->next_group = allocate_new_group(max_block_capacity, current_group);
+				current_group->next_group = allocate_new_group(extra_capacity, current_group);
 			#endif
 
 			current_group = current_group->next_group;
-			total_capacity += max_block_capacity;
+			total_capacity += extra_capacity;
 			--number_of_max_groups;
 		}
 
@@ -3141,7 +3164,7 @@ private:
 			const aligned_pointer_type aligned_element_pointer = pointer_cast<aligned_pointer_type>(element_pointer);
 			// Note: we start with checking the back group first, as it will be the largest group in most cases, so there's a statistically-higher chance of the element being within it.
 
-			// Special case for back group in case the element was in a group which became empty and got moved to the unused_groups list or was deallocated, and then that memory was re-used (ie. it became the current back group). The following prevents the function from mistakenly returning an iterator which is beyond the back element of the colony:
+			// Special case for back group in case the element was in a group which became empty and got moved to the unused_groups list or was deallocated, and then that memory was re-used (ie. it became the current back group). The following prevents the function from mistakenly returning an iterator which is beyond the back element of the hive:
 			if (std::greater_equal()(aligned_element_pointer, end_iterator.group_pointer->elements) && std::less()(aligned_element_pointer, end_iterator.element_pointer))
 			{
 				const skipfield_pointer_type skipfield_pointer = end_iterator.group_pointer->skipfield + (aligned_element_pointer - end_iterator.group_pointer->elements);
