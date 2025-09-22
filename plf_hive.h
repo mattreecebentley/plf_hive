@@ -3100,7 +3100,7 @@ public:
 			}
 			else
 			{
-				const size_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
+				const skipfield_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
 				negative_remainder -= max_block_capacity - extra_capacity;
 
 				first_unused_group = current_group = allocate_new_group(extra_capacity, begin_iterator.group_pointer);
@@ -3125,7 +3125,7 @@ public:
 
 		while (number_of_max_groups != 0)
 		{
-			const size_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
+			const skipfield_type extra_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
 			negative_remainder -= max_block_capacity - extra_capacity;
 
 			#ifdef PLF_EXCEPTIONS_SUPPORT
