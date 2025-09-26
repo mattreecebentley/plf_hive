@@ -3127,7 +3127,7 @@ public:
 
 		group_pointer_type current_group, first_unused_group;
 
-		if (begin_iterator.group_pointer == NULL) // Most common scenario - empty colony
+		if (begin_iterator.group_pointer == NULL) // Most common scenario - empty hive
 		{
 			initialize(remainder);
 			begin_iterator.group_pointer->size = 0; // Note: this is set to 1 by default in the initialize function (which is optimised for insert())
@@ -3141,7 +3141,7 @@ public:
 			total_capacity += new_block_capacity;
 			--number_of_max_groups;
 		}
-		else // Non-empty colony, add first new unused group:
+		else // Non-empty hive, add first new unused group:
 		{
 			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
 			total_capacity += remainder;
