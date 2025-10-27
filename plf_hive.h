@@ -733,6 +733,18 @@ private:
 	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, const group_pointer_type previous = nullptr)
 	{
 		const group_pointer_type new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
+		total_capacity += elements_per_group;
+
+		if (total_capacity > max_size())
+		{
+			total_capacity -= elements_per_group;
+
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				throw std::length_error("New block allocation would create capacity greater than max_size()");
+			#else
+				std::terminate();
+			#endif
+		}
 
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			try
@@ -742,6 +754,7 @@ private:
 			catch (...)
 			{
 				std::allocator_traits<group_allocator_type>::deallocate(group_allocator, new_group, 1);
+				total_capacity -= elements_per_group;
 				throw;
 			}
 		#else
@@ -758,6 +771,14 @@ private:
 	{
 		std::allocator_traits<aligned_struct_allocator_type>::deallocate(aligned_struct_allocator, pointer_cast<aligned_struct_pointer_type>(the_group->elements), get_aligned_block_capacity(the_group->capacity));
 		std::allocator_traits<group_allocator_type>::deallocate(group_allocator, the_group, 1);
+	}
+
+
+
+	void deallocate_group_remove_capacity(const group_pointer_type the_group) noexcept
+	{
+		total_capacity -= the_group->capacity;
+      deallocate_group(the_group);
 	}
 
 
@@ -829,7 +850,6 @@ private:
 		end_iterator.group_pointer = begin_iterator.group_pointer = allocate_new_group(first_group_size);
 		end_iterator.element_pointer = begin_iterator.element_pointer = begin_iterator.group_pointer->elements;
 		end_iterator.skipfield_pointer = begin_iterator.skipfield_pointer = begin_iterator.group_pointer->skipfield;
-		total_capacity = first_group_size;
 	}
 
 
@@ -988,9 +1008,8 @@ public:
 
 				if (unused_groups_head == nullptr)
 				{
-					const skipfield_type new_group_size = static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity)));
 					reset_group_numbers_if_necessary();
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+					next_group = allocate_new_group(static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity))), end_iterator.group_pointer);
 
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_copy_constructible<element_type>::value)
@@ -1001,7 +1020,7 @@ public:
 							}
 							catch (...)
 							{
-								deallocate_group(next_group);
+								deallocate_group_remove_capacity(next_group);
 								throw;
 							}
 						}
@@ -1010,8 +1029,6 @@ public:
 					{
 						construct_element(next_group->elements, element);
 					}
-
-					total_capacity += new_group_size;
 				}
 				else
 				{
@@ -1100,9 +1117,8 @@ public:
 
 				if (unused_groups_head == nullptr)
 				{
-					const skipfield_type new_group_size = static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity)));
 					reset_group_numbers_if_necessary();
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+					next_group = allocate_new_group(static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity))), end_iterator.group_pointer);
 
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_move_constructible<element_type>::value)
@@ -1113,7 +1129,7 @@ public:
 							}
 							catch (...)
 							{
-								deallocate_group(next_group);
+								deallocate_group_remove_capacity(next_group);
 								throw;
 							}
 						}
@@ -1122,8 +1138,6 @@ public:
 					{
 						construct_element(next_group->elements, std::move(element));
 					}
-
-					total_capacity += new_group_size;
 				}
 				else
 				{
@@ -1212,9 +1226,8 @@ public:
 
 				if (unused_groups_head == nullptr)
 				{
-					const skipfield_type new_group_size = static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity)));
 					reset_group_numbers_if_necessary();
-					next_group = allocate_new_group(new_group_size, end_iterator.group_pointer);
+					next_group = allocate_new_group(static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity))), end_iterator.group_pointer);
 
 					#ifdef PLF_EXCEPTIONS_SUPPORT
 						if constexpr (!std::is_nothrow_constructible<element_type>::value)
@@ -1225,7 +1238,7 @@ public:
 							}
 							catch (...)
 							{
-								deallocate_group(next_group);
+								deallocate_group_remove_capacity(next_group);
 								throw;
 							}
 						}
@@ -1234,8 +1247,6 @@ public:
 					{
 						construct_element(next_group->elements, std::forward<arguments>(parameters) ...);
 					}
-
-					total_capacity += new_group_size;
 				}
 				else
 				{
@@ -2038,8 +2049,7 @@ public:
 				remove_from_groups_with_erasures_list(it.group_pointer);
 			}
 
-			total_capacity -= it.group_pointer->capacity;
-			deallocate_group(it.group_pointer);
+			deallocate_group_remove_capacity(it.group_pointer);
 
 			// note: end iterator only needs to be changed if the deleted group was the final group in the chain ie. not in this case
 			begin_iterator.element_pointer = begin_iterator.group_pointer->elements + *(begin_iterator.group_pointer->skipfield); // If the beginning index has been erased (ie. skipfield != 0), skip to next non-erased element
@@ -2059,8 +2069,7 @@ public:
 
 			if (it.group_pointer->next_group != end_iterator.group_pointer)
 			{
-				total_capacity -= it.group_pointer->capacity;
-				deallocate_group(it.group_pointer);
+				deallocate_group_remove_capacity(it.group_pointer);
 			}
 			else
 			{
@@ -2255,8 +2264,7 @@ public:
 
 				if (current_group != end_iterator.group_pointer && current_group->next_group != end_iterator.group_pointer)
 				{
-					total_capacity -= current_group->capacity;
-					deallocate_group(current_group);
+					deallocate_group_remove_capacity(current_group);
 				}
 				else
 				{
@@ -2478,8 +2486,7 @@ private:
 				if (current_group->capacity <= difference)
 				{ // Remove group:
 					difference -= current_group->capacity;
-					total_capacity -= current_group->capacity;
-					deallocate_group(current_group);
+					deallocate_group_remove_capacity(current_group);
 
 					if (current_group == begin_iterator.group_pointer) begin_iterator.group_pointer = next_group;
 				}
@@ -2749,8 +2756,7 @@ public:
 
 				if (current_group->capacity < new_min || current_group->capacity > new_max)
 				{
-					total_capacity -= current_group->capacity;
-					deallocate_group(current_group);
+					deallocate_group_remove_capacity(current_group);
 
 					if (previous_group == nullptr)
 					{
@@ -2961,9 +2967,8 @@ public:
 
 		while(unused_groups_head != nullptr)
 		{
-			total_capacity -= unused_groups_head->capacity;
 			const group_pointer_type next_group = unused_groups_head->next_group;
-			deallocate_group(unused_groups_head);
+			deallocate_group_remove_capacity(unused_groups_head);
 			unused_groups_head = next_group;
 		}
 
@@ -3063,6 +3068,7 @@ public:
 
 		size_type number_of_max_groups = new_capacity / max_block_capacity;
 		skipfield_type remainder = static_cast<skipfield_type>(new_capacity - (number_of_max_groups * max_block_capacity)), negative_remainder = 0;
+		group_pointer_type deallocatable_group = nullptr;
 
 		if (remainder == 0)
 		{
@@ -3071,24 +3077,27 @@ public:
 		}
 		else
 		{
-			if (unused_groups_head != NULL && max_block_capacity - remainder >= min_block_capacity)
+			// Here we try to increase iteration performance by deallocating a small unused group and allocating one larger group.
+			// This also means that if remainder < min_block_capacity we don't have to allocate a min capacity group and then spread the difference over subsequent groups (see subsequent if block).
+			// The smaller group is not deallocated immediately so that, in the event that an exception is triggered when allocating the larger group, we don't end up with lower capacity than before reserve().
+
+			if (unused_groups_head != nullptr && max_block_capacity - remainder >= min_block_capacity)
 			{
-				// If there exists an unused group which's of low-enough capacity, deallocate that and add it's capacity to the remainder group
-				group_pointer_type current_unused_group = unused_groups_head, prev_unused_group = NULL;
+				deallocatable_group = unused_groups_head;
+				group_pointer_type prev_unused_group = nullptr;
 
 				do
 				{
-					const skipfield_type current_capacity = current_unused_group->capacity;
+					const skipfield_type current_capacity = deallocatable_group->capacity;
 
-					if (std::numeric_limits<skipfield_type>::max() - current_capacity > remainder && /* make sure we don't overflow in next line */
+					// If there exists an unused group which's of low-enough capacity, deallocate that later and add it's capacity to the remainder group:
+					if (std::numeric_limits<skipfield_type>::max() - current_capacity > remainder && /* <- to make sure we don't overflow in next line */
 						max_block_capacity >= current_capacity + remainder)
 					{
 						remainder += current_capacity;
-						total_capacity -= current_capacity;
-						const group_pointer_type next_group = current_unused_group->next_group;
-						deallocate_group(current_unused_group);
+						const group_pointer_type next_group = deallocatable_group->next_group;
 
-						if (prev_unused_group != NULL)
+						if (prev_unused_group != nullptr)
 						{
 							prev_unused_group->next_group = next_group;
 						}
@@ -3100,9 +3109,9 @@ public:
 						break;
 					}
 
-					prev_unused_group = current_unused_group;
-					current_unused_group = current_unused_group->next_group;
-				} while (current_unused_group != NULL);
+					prev_unused_group = deallocatable_group;
+					deallocatable_group = deallocatable_group->next_group;
+				} while (deallocatable_group != nullptr);
 			}
 
 
@@ -3112,7 +3121,7 @@ public:
 				negative_remainder = min_block_capacity - remainder;
 				remainder = min_block_capacity;
 
-	  			// This line checks to see, if we have to reduce the size of the max-capacity blocks to spread the negative_remainder out, whether even reducing the max blocks to min capacity will be enough to keep the capacity under max_size(). We add 1 for the initial (remainder) block. This guards against situations where, for example, the min/max limits are very similar so spreading the negative remainder out is less doable:
+	  			// This line checks to see - if we have to reduce the size of the max-capacity blocks to spread the negative_remainder out - whether even reducing the max blocks to min capacity will be enough to keep the capacity under max_size(). We add 1 for the initial (remainder) block. This guards against situations where, for example, the min/max limits are very similar so spreading the negative remainder out is less doable:
 				if (total_capacity + ((number_of_max_groups + 1) * min_block_capacity) > max_size())
 				{
 					#ifdef PLF_EXCEPTIONS_SUPPORT
@@ -3127,7 +3136,7 @@ public:
 
 		group_pointer_type current_group, first_unused_group;
 
-		if (begin_iterator.group_pointer == NULL) // Most common scenario - empty hive
+		if (begin_iterator.group_pointer == nullptr) // Most common scenario - uninitialized container
 		{
 			initialize(remainder);
 			begin_iterator.group_pointer->size = 0; // Note: this is set to 1 by default in the initialize function (which is optimised for insert())
@@ -3138,13 +3147,29 @@ public:
 			const skipfield_type new_block_capacity = (max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder;
 			negative_remainder -= max_block_capacity - new_block_capacity;
 			first_unused_group = current_group = allocate_new_group(new_block_capacity, begin_iterator.group_pointer);
-			total_capacity += new_block_capacity;
 			--number_of_max_groups;
 		}
 		else // Non-empty hive, add first new unused group:
 		{
-			first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
-			total_capacity += remainder;
+			#ifdef PLF_EXCEPTIONS_SUPPORT
+				try
+				{
+					first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
+				}
+				catch (...)
+				{
+					if (deallocatable_group != nullptr) // roll back group removal
+					{
+						add_group_to_unused_groups_list(deallocatable_group);
+					}
+					throw;
+				}
+			#else
+				first_unused_group = current_group = allocate_new_group(remainder, end_iterator.group_pointer);
+			#endif
+
+			// We've now successfully allocated another group which is guaranteed to be larger than this group, so capacity is larger than it was before reserve() was called even if the other allocations below trigger an exception, and we can deallocate the group:
+			if (deallocatable_group != NULL) deallocate_group_remove_capacity(deallocatable_group);
 		}
 
 
@@ -3169,7 +3194,6 @@ public:
 			#endif
 
 			current_group = current_group->next_group;
-			total_capacity += new_block_capacity;
 			--number_of_max_groups;
 		}
 
@@ -3255,7 +3279,7 @@ public:
 		// Process: if there are unused memory spaces at the end of the current back group of the chain, convert them
 		// to skipped elements and add the locations to the group's free list.
 		// Then link the destination's groups to the source's groups and nullify the source.
-		// If the source has more unused memory spaces in the back group than the destination, swap them before processing to reduce the number of locations added to a free list and also subsequent jumps during iteration.
+		// If the source has more unused memory spaces in the back group than the destination, swap them before processing to reduce the number of locations added to a free list and also the number of jumps during iteration.
 
 		assert(&source != this);
 
