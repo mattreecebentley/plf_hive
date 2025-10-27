@@ -732,19 +732,17 @@ private:
 
 	group_pointer_type allocate_new_group(const skipfield_type elements_per_group, const group_pointer_type previous = nullptr)
 	{
-		const group_pointer_type new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
-		total_capacity += elements_per_group;
-
-		if (total_capacity > max_size())
+		if (max_size() - total_capacity < elements_per_group)
 		{
-			total_capacity -= elements_per_group;
-
 			#ifdef PLF_EXCEPTIONS_SUPPORT
 				throw std::length_error("New block allocation would create capacity greater than max_size()");
 			#else
 				std::terminate();
 			#endif
 		}
+
+		const group_pointer_type new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
+		total_capacity += elements_per_group;
 
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			try
