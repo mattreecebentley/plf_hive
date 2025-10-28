@@ -741,8 +741,8 @@ private:
 			#endif
 		}
 
-		total_capacity += elements_per_group; // I don't know why GCC creates better/smaller codegen when this is placed here rather than at bottom, But it does.
 		const group_pointer_type new_group = std::allocator_traits<group_allocator_type>::allocate(group_allocator, 1, previous);
+		total_capacity += elements_per_group; // I don't know why GCC creates better/smaller codegen when this is placed here rather than at bottom of function, But it does.
 
 		#ifdef PLF_EXCEPTIONS_SUPPORT
 			try
