@@ -990,8 +990,8 @@ private:
 
 
 
-	template<typename... arguments>
-	constexpr void construct_element(const aligned_pointer_type location, arguments &&... parameters)
+	template<typename pointer_type, typename... arguments>
+	constexpr void construct_element(const pointer_type location, arguments &&... parameters)
 	{
 		std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(location), std::forward<arguments>(parameters) ...);
 	}
@@ -1031,7 +1031,7 @@ public:
 						{
 							try
 							{
-								construct_element(to_aligned_pointer(next_group->elements), element);
+								construct_element(next_group->elements, element);
 							}
 							catch (...)
 							{
@@ -1042,12 +1042,12 @@ public:
 						else
 					#endif
 					{
-						construct_element(to_aligned_pointer(next_group->elements), element);
+						construct_element(next_group->elements, element);
 					}
 				}
 				else
 				{
-					construct_element(to_aligned_pointer(unused_groups_head->elements), element);
+					construct_element(unused_groups_head->elements, element);
 					next_group = reuse_unused_group();
 				}
 
@@ -1140,7 +1140,7 @@ public:
 						{
 							try
 							{
-								construct_element(to_aligned_pointer(next_group->elements), std::move(element));
+								construct_element(next_group->elements, std::move(element));
 							}
 							catch (...)
 							{
@@ -1151,12 +1151,12 @@ public:
 						else
 					#endif
 					{
-						construct_element(to_aligned_pointer(next_group->elements), std::move(element));
+						construct_element(next_group->elements, std::move(element));
 					}
 				}
 				else
 				{
-					construct_element(to_aligned_pointer(unused_groups_head->elements), std::move(element));
+					construct_element(unused_groups_head->elements, std::move(element));
 					next_group = reuse_unused_group();
 				}
 
@@ -1249,7 +1249,7 @@ public:
 						{
 							try
 							{
-								construct_element(to_aligned_pointer(next_group->elements), std::forward<arguments>(parameters) ...);
+								construct_element(next_group->elements, std::forward<arguments>(parameters) ...);
 							}
 							catch (...)
 							{
@@ -1260,12 +1260,12 @@ public:
 						else
 					#endif
 					{
-						construct_element(to_aligned_pointer(next_group->elements), std::forward<arguments>(parameters) ...);
+						construct_element(next_group->elements, std::forward<arguments>(parameters) ...);
 					}
 				}
 				else
 				{
-					construct_element(to_aligned_pointer(unused_groups_head->elements), std::forward<arguments>(parameters) ...);
+					construct_element(unused_groups_head->elements, std::forward<arguments>(parameters) ...);
 					next_group = reuse_unused_group();
 				}
 
