@@ -93,7 +93,7 @@ class non_copyable_type
 private:
 	int i;
 	non_copyable_type(const non_copyable_type &); // non construction-copyable
-	non_copyable_type& operator=(const non_copyable_type &); // non copyable
+	non_copyable_type& operator=(const non_copyable_type&); // non copyable
 public:
 	non_copyable_type(int a) : i(a) {}
 };
@@ -122,6 +122,7 @@ struct small_struct_non_trivial
 
 int main()
 {
+	freopen("error.log","w", stderr); // For catching assertion failure info when run outside of a command line prompt
 	using namespace plf;
 
 
@@ -1096,11 +1097,32 @@ int main()
 			for (hive<small_struct_non_trivial>::iterator ss_it = ss_nt.begin(); ss_it != ss_nt.end(); ++ss_it)
 			{
 				ss_it = ss_nt.erase(ss_it);
-				++range1;
 			}
 
 			failpass("Non-trivial type erase half of all elements", ss_nt.size() == 5000);
 
+			ss_nt.assign(10000, ss);
+			
+			failpass("Non-trivial type assign", ss_nt.size() == 10000);
+
+			for (hive<small_struct_non_trivial>::iterator ss_it = ss_nt.begin(); ss_it != ss_nt.end(); ++ss_it)
+			{
+				ss_it = ss_nt.erase(ss_it);
+			}
+
+			failpass("Non-trivial type erase half of all elements post-assign", ss_nt.size() == 5000);
+
+
+			hive<small_struct_non_trivial> ss_nt2;
+			ss_nt2.insert(5, ss);
+			
+			ss_nt = ss_nt2;
+			
+			failpass("Non-trivial type range-assign", ss_nt.size() == 5);
+
+			
+			
+			
 
 			for (unsigned int loop_counter = 0; loop_counter != 50; ++loop_counter)
 			{
@@ -1540,6 +1562,49 @@ int main()
 			}
 
 			message("Fuzz-test range assign passed.");
+
+
+			i_hive.clear();
+
+
+			for (unsigned int internal_loop_counter = 0; internal_loop_counter != 10; ++internal_loop_counter)
+			{
+				const unsigned int capacity = rand() & 65535;
+				i_vector.assign(capacity, 1);
+				i_hive.assign(i_vector.begin(), i_vector.end());
+
+				total = 0;
+				unsigned int subtract = 0;
+
+				for (hive<int>::iterator it3 = i_hive.begin(); it3 != i_hive.end(); )
+				{
+					if ((rand() & 7) == 0)
+					{
+						it3 = i_hive.erase(it3);
+						++subtract;
+					}
+					else
+					{
+						total += *it3++;
+					}
+				}
+
+				if (i_hive.size() != capacity - subtract)
+				{
+					printf("Fuzz-test range assign + erase capacity Fail: global loop counter: %u, internal loop counter: %u.\n", looper, internal_loop_counter);
+					getchar();
+					abort();
+				}
+
+				if (i_hive.size() != static_cast<unsigned int>(total))
+				{
+					printf("Fuzz-test range assign + erase sum Fail: global loop counter: %u, internal loop counter: %u.\n", looper, internal_loop_counter);
+					getchar();
+					abort();
+				}
+			}
+
+			message("Fuzz-test range assign + erase passed.");
 
 
 			i_hive.clear();
@@ -2044,7 +2109,6 @@ int main()
 			erase_if(i_hive, std::bind(std::greater<int>(), std::placeholders::_1, 499));
 
 			failpass("erase_if test",	static_cast<int>(i_hive.size()) == 500);
-
 		}
 	}
 
