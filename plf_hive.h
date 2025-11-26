@@ -2600,7 +2600,7 @@ private:
 	void reset_group_range_assign(iterator &it) noexcept
 	{
 		std::memset(static_cast<void *>(it.group_pointer->skipfield), 0, it.group_pointer->capacity * sizeof(skipfield_type));
-		it.group_pointer->size = it.element_pointer - to_aligned_pointer(it.group_pointer->elements);
+		it.group_pointer->size = static_cast<skipfield_type>(it.element_pointer - to_aligned_pointer(it.group_pointer->elements));
 	}
 
 
@@ -2680,7 +2680,7 @@ private:
 					{
 						skipfield_type skipblock_length = *(current.skipfield_pointer);
 						iterator next_element(current.group_pointer, current.element_pointer + skipblock_length, current.skipfield_pointer + skipblock_length);
-						skipblock_length = (skipblock_length > size) ? size : skipblock_length;
+						skipblock_length = (skipblock_length > size) ? static_cast<skipfield_type>(size) : skipblock_length;
 
 						for (const aligned_pointer_type fill_end = current.element_pointer + skipblock_length; current.element_pointer != fill_end; ++current.element_pointer, ++current.skipfield_pointer)
 						{
