@@ -311,8 +311,8 @@ private:
 	// Adaptive minimum based around aligned size, sizeof(group) and sizeof(hive):
 	static constexpr skipfield_type block_capacity_default_min() noexcept
 	{
-		const constexpr skipfield_type adaptive_size = static_cast<skipfield_type>(((sizeof(hive) + sizeof(group)) * 2) / sizeof(aligned_element_struct));
-		const constexpr skipfield_type max_block_capacity = block_capacity_default_max(); // Necessary to check against in situations with > 64bit pointer sizes and small sizeof(T)
+		constexpr skipfield_type adaptive_size = static_cast<skipfield_type>(((sizeof(hive) + sizeof(group)) * 2) / sizeof(aligned_element_struct));
+		constexpr skipfield_type max_block_capacity = block_capacity_default_max(); // Necessary to check against in situations with > 64bit pointer sizes and small sizeof(T)
 		return std::max(static_cast<skipfield_type>(8), std::min(adaptive_size, max_block_capacity));
 	}
 
