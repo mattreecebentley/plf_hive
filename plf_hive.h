@@ -37,6 +37,7 @@
 #endif
 
 #include <algorithm> // std::fill_n, std::sort, std::swap
+#include <cstdint> // uint_least16_t etc
 #include <cassert>	// assert
 #include <cstring>	// memset, memcpy, size_t
 #include <limits>  // std::numeric_limits
@@ -1422,7 +1423,7 @@ private:
 			{
 				// Reconstruct existing skipblock and free-list indexes to reflect partially-reused skipblock:
 				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(current_location - location);
-				erasure_groups_head->size = static_cast<skipfield_type>(erasure_groups_head->size + elements_constructed_before_exception);
+				erasure_groups_head->size += elements_constructed_before_exception;
 				total_size += elements_constructed_before_exception;
 
 				std::memset(skipfield_pointer, 0, elements_constructed_before_exception * sizeof(skipfield_type));
@@ -1488,7 +1489,7 @@ private:
 		}
 
 		std::memset(skipfield_pointer, 0, size * sizeof(skipfield_type)); // reset skipfield nodes within skipblock to 0
-		erasure_groups_head->size = static_cast<skipfield_type>(erasure_groups_head->size + size);
+		erasure_groups_head->size += size;
 		total_size += size;
 	}
 
@@ -1580,7 +1581,7 @@ public:
 				// Update skipfield (earlier nodes already memset'd in fill_skipblock function):
 				*(skipfield_pointer + size) = new_skipblock_size;
 				*(skipfield_pointer + skipblock_size - 1) = new_skipblock_size;
-				erasure_groups_head->free_list_head = static_cast<skipfield_type>(erasure_groups_head->free_list_head + size); // set free list head to new start node
+				erasure_groups_head->free_list_head += static_cast<skipfield_type>(size); // set free list head to new start node
 
 				// Update free list with new head:
 				edit_free_list_head(element_pointer + size, prev_index);
@@ -1602,7 +1603,7 @@ public:
 		if (group_remainder != 0)
 		{
 			fill(element, group_remainder);
-			end_iterator.group_pointer->size = static_cast<skipfield_type>(end_iterator.group_pointer->size + group_remainder);
+			end_iterator.group_pointer->size += end_iterator.group_pointer->size;
 
 			if (size == group_remainder) // ie. remaining capacity was >= remaining elements to be filled
 			{
@@ -1722,7 +1723,7 @@ private:
 		}
 
 		std::memset(skipfield_pointer, 0, size * sizeof(skipfield_type)); // reset skipfield nodes within skipblock to 0
-		erasure_groups_head->size = static_cast<skipfield_type>(erasure_groups_head->size + size);
+		erasure_groups_head->size += size;
 		total_size += size;
 	}
 
@@ -1810,7 +1811,7 @@ private:
 
 				*(skipfield_pointer + size) = new_skipblock_size;
 				*(skipfield_pointer + skipblock_size - 1) = new_skipblock_size;
-				erasure_groups_head->free_list_head = static_cast<skipfield_type>(erasure_groups_head->free_list_head + size);
+				erasure_groups_head->free_list_head += static_cast<skipfield_type>(size);
 				edit_free_list_head(element_pointer + size, prev_index);
 
 				if (prev_index != std::numeric_limits<skipfield_type>::max())
@@ -1827,7 +1828,7 @@ private:
 		if (group_remainder != 0)
 		{
 			range_fill(it, group_remainder);
-			end_iterator.group_pointer->size = static_cast<skipfield_type>(end_iterator.group_pointer->size + group_remainder);
+			end_iterator.group_pointer->size += group_remainder;
 
 			if (size == group_remainder)
 			{
@@ -2241,7 +2242,7 @@ private:
 		}
 
 		// Update group and hive size:
-		start.group_pointer->size = static_cast<skipfield_type>(start.group_pointer->size - erasure_count); // clang complains if we do it the logical way here
+		start.group_pointer->size -= erasure_count;
 		total_size -= erasure_count;
 	}
 
