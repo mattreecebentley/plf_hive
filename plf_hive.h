@@ -46,6 +46,7 @@
 #include <stdexcept> // std::length_error, std::out_of_range
 #include <functional> // std::less
 #include <cstddef> // offsetof, used in blank()
+#include <cstdint> // uint_least16_t, etc
 #include <type_traits> // std::is_trivially_destructible, enable_if_t, type_identity_t, etc
 #include <utility> // std::move
 #include <initializer_list>
@@ -481,14 +482,11 @@ public:
 		skipfield_allocator(alloc),
 		tuple_allocator(alloc)
 	{
-		assert(&source != this);
-
 		if constexpr (!std::allocator_traits<allocator_type>::is_always_equal::value)
 		{
 			if (alloc != static_cast<allocator_type &>(source))
 			{
 				blank();
-				static_cast<allocator_type &>(*this) = static_cast<allocator_type &>(source);
 				reserve_and_range_fill(source.total_size, std::make_move_iterator(source.begin_iterator));
 				source.destroy_all_data();
 			}
@@ -514,7 +512,6 @@ public:
 		skipfield_allocator(*this),
 		tuple_allocator(*this)
 	{
-		assert(&source != this);
 		source.blank();
 	}
 
@@ -544,6 +541,7 @@ public:
 			fill_unused_groups(fill_number, element, 0, nullptr, begin_iterator.group_pointer);
 		}
 	}
+
 
 
 	hive(const size_type fill_number, const element_type &element, const allocator_type &alloc = allocator_type()) :
@@ -2953,14 +2951,14 @@ public:
 		assert(&source != this);
 
 		if constexpr (std::allocator_traits<allocator_type>::propagate_on_container_move_assignment::value || std::allocator_traits<allocator_type>::is_always_equal::value)
-		{
+		{	// Note: we need this to be constexpr to avoid warning errors on the potentially-throwing section further down.
 			move_assign(std::move(source));
 		}
 		else if (static_cast<allocator_type &>(*this) == static_cast<allocator_type &>(source))
 		{
 			move_assign(std::move(source));
 		}
-		else // Allocator isn't movable so move/copy elements from source and deallocate the source's blocks:
+		else // Allocator isn't propagatable so move/copy elements from source and deallocate the source's blocks - could throw here:
 		{
 			if constexpr (!(std::is_move_constructible<element_type>::value && std::is_move_assignable<element_type>::value))
 			{
