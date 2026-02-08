@@ -2737,6 +2737,22 @@ public:
 
 
 
+	size_type memory() const noexcept
+	{
+		size_type memory_use = sizeof(*this); // sizeof hive basic structure
+		end_iterator.group_pointer->next_group = unused_groups_head; // temporarily link the main groups and unused groups (reserved groups) in order to only have one loop below instead of several
+
+		for(group_pointer_type current = begin_iterator.group_pointer; current != nullptr; current = current->next_group)
+		{
+			memory_use += sizeof(group) + (get_aligned_block_capacity(current->capacity) * sizeof(aligned_allocation_struct)); // add memory block sizes and the size of the group structs themselves. The original calculation, including divisor, is necessary in order to correctly round up the number of allocations
+		}
+
+		end_iterator.group_pointer->next_group = nullptr; // unlink main groups and unused groups
+		return memory_use;
+	}
+
+
+
 private:
 
 	// get all elements contiguous in memory and shrink to fit, remove erasures and free lists. Invalidates all iterators and pointers to elements.
@@ -3211,7 +3227,7 @@ public:
 			#endif
 
 			// We've now successfully allocated another group which is guaranteed to be larger than this group, so capacity is larger than it was before reserve() was called even if the other allocations below trigger an exception, and we can deallocate the group:
-			if (deallocatable_group != NULL) deallocate_group_remove_capacity(deallocatable_group);
+			if (deallocatable_group != nullptr) deallocate_group_remove_capacity(deallocatable_group);
 		}
 
 
@@ -3780,12 +3796,12 @@ public:
 	{
 	private:
 		typedef typename hive::group_pointer_type 		group_pointer_type;
-		typedef typename hive::aligned_pointer_type 	aligned_pointer_type;
+		typedef typename hive::aligned_pointer_type 		aligned_pointer_type;
 		typedef typename hive::skipfield_pointer_type 	skipfield_pointer_type;
 
-		group_pointer_type		group_pointer;
-		aligned_pointer_type 	element_pointer;
-		skipfield_pointer_type	skipfield_pointer;
+		group_pointer_type		group_pointer {nullptr};
+		aligned_pointer_type 	element_pointer {nullptr};
+		skipfield_pointer_type	skipfield_pointer {nullptr};
 
 	public:
 		struct hive_iterator_tag {};
@@ -3815,19 +3831,11 @@ public:
 
 
 
-		hive_iterator() noexcept:
-			group_pointer(nullptr),
-			element_pointer(nullptr),
-			skipfield_pointer(nullptr)
-		{}
+		hive_iterator() noexcept = default;
 
 
 
-		hive_iterator (const hive_iterator &source) noexcept: // Note: Surprisingly, use of = default here and in other simple constructors results in slowdowns of up to 10% in many benchmarks under GCC
-			group_pointer(source.group_pointer),
-			element_pointer(source.element_pointer),
-			skipfield_pointer(source.skipfield_pointer)
-		{}
+		hive_iterator (const hive_iterator &source) noexcept = default;
 
 
 
@@ -3840,11 +3848,7 @@ public:
 
 
 
-		hive_iterator(hive_iterator &&source) noexcept:
-			group_pointer(std::move(source.group_pointer)),
-			element_pointer(std::move(source.element_pointer)),
-			skipfield_pointer(std::move(source.skipfield_pointer))
-		{}
+		hive_iterator(hive_iterator &&source) noexcept = default;
 
 
 
@@ -3857,13 +3861,7 @@ public:
 
 
 
-		hive_iterator & operator = (const hive_iterator &source) noexcept
-		{
-			group_pointer = source.group_pointer;
-			element_pointer = source.element_pointer;
-			skipfield_pointer = source.skipfield_pointer;
-			return *this;
-		}
+		hive_iterator & operator = (const hive_iterator &source) noexcept = default;
 
 
 
@@ -3878,14 +3876,7 @@ public:
 
 
 
-		hive_iterator & operator = (hive_iterator &&source) noexcept
-		{
-			assert(&source != this);
-			group_pointer = std::move(source.group_pointer);
-			element_pointer = std::move(source.element_pointer);
-			skipfield_pointer = std::move(source.skipfield_pointer);
-			return *this;
-		}
+		hive_iterator & operator = (hive_iterator &&source) noexcept = default;
 
 
 
@@ -4397,13 +4388,10 @@ public:
 
 
 
-		hive_reverse_iterator () noexcept
-		{}
+		hive_reverse_iterator () noexcept = default;
 
 
-		hive_reverse_iterator (const hive_reverse_iterator &source) noexcept:
-			current(source.current)
-		{}
+		hive_reverse_iterator (const hive_reverse_iterator &source) noexcept = default;
 
 
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
@@ -4426,16 +4414,16 @@ public:
 			++(*this);
 		}
 
+      
+		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept = default;
 
-		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept:
-			current(std::move(source.current))
-		{}
 
 
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
 		hive_reverse_iterator (hive_reverse_iterator<false> &&source) noexcept:
 			current(std::move(source.current))
 		{}
+
 
 
 		hive_reverse_iterator& operator = (const hive_iterator<is_const_r> &source) noexcept
@@ -4445,7 +4433,7 @@ public:
 			return *this;
 		}
 
-
+      
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
 		hive_reverse_iterator& operator = (const hive_iterator<false> &source) noexcept
 		{
@@ -4454,12 +4442,8 @@ public:
 			return *this;
 		}
 
-
-		hive_reverse_iterator& operator = (const hive_reverse_iterator &source) noexcept
-		{
-			current = source.current;
-			return *this;
-		}
+      
+		hive_reverse_iterator& operator = (const hive_reverse_iterator &source) noexcept = default;
 
 
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
@@ -4470,12 +4454,7 @@ public:
 		}
 
 
-		hive_reverse_iterator& operator = (hive_reverse_iterator &&source) noexcept
-		{
-			assert(&source != this);
-			current = std::move(source.current);
-			return *this;
-		}
+		hive_reverse_iterator& operator = (hive_reverse_iterator &&source) noexcept = default;
 
 
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
