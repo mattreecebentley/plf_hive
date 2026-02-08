@@ -2737,22 +2737,6 @@ public:
 
 
 
-	size_type memory() const noexcept
-	{
-		size_type memory_use = sizeof(*this); // sizeof hive basic structure
-		end_iterator.group_pointer->next_group = unused_groups_head; // temporarily link the main groups and unused groups (reserved groups) in order to only have one loop below instead of several
-
-		for(group_pointer_type current = begin_iterator.group_pointer; current != nullptr; current = current->next_group)
-		{
-			memory_use += sizeof(group) + (get_aligned_block_capacity(current->capacity) * sizeof(aligned_allocation_struct)); // add memory block sizes and the size of the group structs themselves. The original calculation, including divisor, is necessary in order to correctly round up the number of allocations
-		}
-
-		end_iterator.group_pointer->next_group = nullptr; // unlink main groups and unused groups
-		return memory_use;
-	}
-
-
-
 private:
 
 	// get all elements contiguous in memory and shrink to fit, remove erasures and free lists. Invalidates all iterators and pointers to elements.
