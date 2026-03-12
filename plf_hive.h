@@ -1632,7 +1632,7 @@ public:
 private:
 
 	template <class iterator_type>
-	void range_fill(iterator_type it, const skipfield_type size)
+	void range_fill(iterator_type &it, const skipfield_type size)
 	{
 		const aligned_pointer_type fill_end = end_iterator.element_pointer + size;
 
@@ -1736,7 +1736,7 @@ private:
 
 
 	template <class iterator_type>
-	void range_fill_unused_groups(size_type size, iterator_type &it, size_type group_number, group_pointer_type previous_group, const group_pointer_type current_group)
+	void range_fill_unused_groups(size_type size, iterator_type it, size_type group_number, group_pointer_type previous_group, const group_pointer_type current_group)
 	{
 		for (end_iterator.group_pointer = current_group; end_iterator.group_pointer->capacity < size; end_iterator.group_pointer = end_iterator.group_pointer->next_group)
 		{
