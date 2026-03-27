@@ -146,9 +146,6 @@ int main()
 	}
 
 
-	message("Press Enter to continue");
-	getchar();
-
 	for (unsigned int looper = 0; looper != 100; ++looper)
 	{
 		{
@@ -2081,6 +2078,68 @@ int main()
 			failpass("erase_if test",	static_cast<int>(i_hive.size()) == 500);
 
 		}
+
+		{
+			title2("range/fill-insertion when skipblocks are present testing");
+
+			hive<int> i_hive(100, 1);
+
+			i_hive.erase(std::next(i_hive.begin(), 80), i_hive.end());
+			i_hive.insert(10, 2);
+
+			unsigned int total1s = 0, total2s = 0, total3s = 0;
+
+			for (hive<int>::const_iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				total1s += *current == 1;
+				total2s += *current == 2;
+			}
+
+			failpass("fill-insert smaller than pre-existing skipblock test", static_cast<int>(i_hive.size()) == 90 && total1s == 80 && total2s == 10);
+
+			i_hive.insert(40, 3);
+			total2s = 0;
+
+			for (hive<int>::const_iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				total2s += *current == 2;
+				total3s += *current == 3;
+			}
+
+			failpass("fill-insert larger than pre-existing skipblock test", static_cast<int>(i_hive.size()) == 130 && total2s == 10 && total3s == 40);
+
+
+
+			i_hive.erase(std::next(i_hive.begin(), 120), i_hive.end());
+			i_hive.insert({4, 4, 4, 4, 4});
+
+			unsigned int total4s = 0;
+			total3s = 0;
+
+			for (hive<int>::const_iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				total3s += *current == 3;
+				total4s += *current == 4;
+			}
+
+			failpass("range-insert smaller than pre-existing skipblock test", static_cast<int>(i_hive.size()) == 125 && total3s == 30 && total4s == 5);
+
+			i_hive.insert({5, 5, 5, 5, 5, 5, 5, 5, 5, 5});
+
+			total4s = 0;
+			unsigned int total5s = 0;
+
+			for (hive<int>::const_iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				total4s += *current == 4;
+				total5s += *current == 5;
+			}
+
+			failpass("range-insert larger than pre-existing skipblock test", static_cast<int>(i_hive.size()) == 135 && total4s == 5 && total5s == 10);
+
+		}
+
+
 	}
 
 	title1("Test Suite PASS - Press ENTER to Exit");
