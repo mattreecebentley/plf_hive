@@ -88,6 +88,21 @@ struct small_struct
 
 
 
+struct exceptions_test
+{
+	int num;
+
+	exceptions_test(const int num2) noexcept: num(num2) {};
+
+	exceptions_test(const exceptions_test &et)
+	{
+		if (et.num == 4) throw 123;
+		num = et.num;
+	};
+};
+
+
+
 class non_copyable_type
 {
 private:
@@ -2140,6 +2155,36 @@ int main()
 		}
 
 
+		{
+			title2("range fill partial recovery tests");
+			
+			hive<exceptions_test> i_hive;
+			exceptions_test input_data[10] = {6, 6, 6, 6, 4, 6, 6, 6, 6, 0};
+
+			try
+			{
+				i_hive.insert(input_data, input_data + 10);
+			}
+			catch(...)
+			{} // do nothing
+			
+			failpass("fill-insert initializer-list exceptions test", static_cast<int>(i_hive.size()) == 4);
+
+			i_hive.clear();
+			i_hive.reserve(20);
+			i_hive.insert(20, input_data[0]);
+			hive<exceptions_test>::iterator start = std::next(i_hive.begin(), 5), end = std::next(i_hive.begin(), 15);
+			i_hive.erase(start, end); // Create skip-block in middle of hive sequence
+
+			try
+			{
+				i_hive.insert(input_data, input_data + 10); // Insert directly into the skipblock and trigger an exception
+			}
+			catch(...)
+			{} // do nothing
+
+			failpass("fill-insert into skip-block exceptions test", static_cast<int>(i_hive.size()) == 14);
+		}
 	}
 
 	title1("Test Suite PASS - Press ENTER to Exit");

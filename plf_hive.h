@@ -62,8 +62,12 @@ namespace plf
 	template <class T>
 	concept hive_iterator_concept = requires { typename T::hive_iterator_tag; };
 
-	#ifndef PLF_FROM_RANGE // To ensure interoperability with other plf lib containers
-		#define PLF_FROM_RANGE
+	#ifndef PLF_RANGES // To ensure interoperability with other plf lib containers
+		#define PLF_RANGES
+
+		// For matching ranges which return input_iterator's and match the container's element type:
+		template <typename range_type, class element_type>
+		concept compatible_range = std::ranges::input_range<range_type> && std::convertible_to<std::ranges::range_reference_t<range_type>, element_type>;
 
 		// Until such point as standard libraries ubiquitously include std::from_range_t, including this so the rangesv3 constructor overloads will work unambiguously:
 		namespace ranges
@@ -630,8 +634,7 @@ public:
 
 	// Ranges v3 constructors:
 
-	template<class range_type>
-		requires std::ranges::range<range_type>
+	template<compatible_range<element_type> range_type>
 	hive(plf::ranges::from_range_t, range_type &&rg, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
@@ -651,8 +654,7 @@ public:
 
 
 
-	template<class range_type>
-		requires std::ranges::range<range_type>
+	template<compatible_range<element_type> range_type>
 	hive(plf::ranges::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
 		hive(plf::ranges::from_range, std::move(rg), block_capacity_default_limits(), alloc)
 	{}
@@ -1268,7 +1270,7 @@ public:
 					next_group = allocate_new_group(static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity))), end_iterator.group_pointer);
 
 					#ifdef PLF_EXCEPTIONS_SUPPORT
-						if constexpr (!std::is_nothrow_constructible<element_type>::value)
+						if constexpr (!std::is_nothrow_constructible<element_type, arguments...>::value)
 						{
 							try
 							{
@@ -1316,7 +1318,7 @@ public:
 			initialize(min_block_capacity);
 
 			#ifdef PLF_EXCEPTIONS_SUPPORT
-				if constexpr (!std::is_nothrow_constructible<element_type>::value)
+				if constexpr (!std::is_nothrow_constructible<element_type, arguments...>::value)
 				{
 					try
 					{
@@ -1868,7 +1870,7 @@ public:
 	// Range insert, move_iterator overload:
 
 	template <class iterator_type>
-	void insert(const std::move_iterator<iterator_type> &first, const std::move_iterator<iterator_type> &last)
+	void insert(const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
 	{
 		range_insert(first, static_cast<size_type>(std::distance(first.base(), last.base())));
 	}
@@ -1884,8 +1886,7 @@ public:
 
 
 
-	template<class range_type>
-		requires std::ranges::range<range_type>
+	template<compatible_range<element_type> range_type>
 	void insert_range(range_type &&the_range)
 	{
 		range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -2593,6 +2594,7 @@ private:
 											check_iterator_end_of_block(next_element);
 											destroy_remainder(next_element);
 										}
+
 										finish_range_assign(current);
 										throw;
 									}
@@ -2708,8 +2710,7 @@ public:
 
 
 
-	template<class range_type>
-		requires std::ranges::range<range_type>
+	template<compatible_range<element_type> range_type>
 	void assign_range(range_type &&the_range)
 	{
 		range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -3226,10 +3227,7 @@ public:
 				}
 				catch (...)
 				{
-					if (deallocatable_group != nullptr) // roll back group removal
-					{
-						add_to_unused_groups_list(deallocatable_group);
-					}
+					if (deallocatable_group != nullptr) add_to_unused_groups_list(deallocatable_group); // roll back group removal
 					throw;
 				}
 			#else
@@ -4424,7 +4422,7 @@ public:
 			++(*this);
 		}
 
-      
+
 		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept = default;
 
 
@@ -4443,7 +4441,7 @@ public:
 			return *this;
 		}
 
-      
+
 		template <bool is_const_rit = is_const_r, class = std::enable_if_t<is_const_rit> >
 		hive_reverse_iterator& operator = (const hive_iterator<false> &source) noexcept
 		{
@@ -4452,7 +4450,7 @@ public:
 			return *this;
 		}
 
-      
+
 		hive_reverse_iterator& operator = (const hive_reverse_iterator &source) noexcept = default;
 
 
