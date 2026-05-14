@@ -2159,7 +2159,7 @@ int main()
 			title2("range fill partial recovery tests");
 			
 			hive<exceptions_test> i_hive;
-			exceptions_test input_data[10] = {6, 6, 6, 6, 4, 6, 6, 6, 6, 0};
+			exceptions_test input_data[10] = {6, 6, 6, 6, 4, 6, 6, 6, 6, 1};
 
 			try
 			{
@@ -2168,11 +2168,17 @@ int main()
 			catch(...)
 			{} // do nothing
 			
-			failpass("fill-insert initializer-list exceptions test", static_cast<int>(i_hive.size()) == 4);
+			int accumulator = 0;
+			for (hive<exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				accumulator += current->num;
+			}
+
+			failpass("fill-insert initializer-list exceptions test", static_cast<int>(i_hive.size()) == 4 && accumulator == 24);
 
 			i_hive.clear();
 			i_hive.reserve(20);
-			i_hive.insert(20, input_data[0]);
+			i_hive.insert(20, input_data[9]); // 20 1's
 			hive<exceptions_test>::iterator start = std::next(i_hive.begin(), 5), end = std::next(i_hive.begin(), 15);
 			i_hive.erase(start, end); // Create skip-block in middle of hive sequence
 
@@ -2183,7 +2189,13 @@ int main()
 			catch(...)
 			{} // do nothing
 
-			failpass("fill-insert into skip-block exceptions test", static_cast<int>(i_hive.size()) == 14);
+			accumulator = 0;
+			for (hive<exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current)
+			{
+				accumulator += current->num;
+			}
+
+			failpass("fill-insert into skip-block exceptions test", static_cast<int>(i_hive.size()) == 14 && accumulator == 34);
 		}
 	}
 
