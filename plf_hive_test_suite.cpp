@@ -446,7 +446,7 @@ int main()
 
 			total = 0;
 
-			for(hive<int *>::iterator the_iterator = --(hive<int *>::iterator(p_hive.end())); the_iterator != p_hive.begin(); std::advance(the_iterator, -2))
+			for(hive<int *>::iterator the_iterator = --(hive<int *>::iterator(p_hive.end())); the_iterator > p_hive.begin(); std::advance(the_iterator, -2))
 			{
 				++total;
 			}
@@ -2156,7 +2156,7 @@ int main()
 
 
 		{
-			title2("range fill partial recovery tests");
+			title2("range/fill insert partial recovery tests");
 			
 			hive<exceptions_test> i_hive;
 			exceptions_test input_data[10] = {6, 6, 6, 6, 4, 6, 6, 6, 6, 1};
