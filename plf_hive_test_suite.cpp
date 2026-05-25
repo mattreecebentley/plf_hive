@@ -418,10 +418,10 @@ int main()
 
 			total = 0;
 
-			for(hive<int *>::reverse_iterator the_iterator = p_hive.rbegin(); the_iterator != p_hive.rend(); ++the_iterator)
+			for(hive<int *>::reverse_iterator the_iterator = p_hive.rbegin(); the_iterator != p_hive.rend();)
 			{
 				hive<int *>::iterator it = the_iterator.base();
-				p_hive.erase(--it);
+				the_iterator = hive<int *>::reverse_iterator(p_hive.erase(--it));
 				++total;
 			}
 
