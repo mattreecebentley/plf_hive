@@ -409,7 +409,7 @@ private:
 		if (capacities.min < hard_capacities.min || capacities.min > capacities.max || capacities.max > hard_capacities.max)
 		{
 			#ifdef PLF_EXCEPTIONS_SUPPORT
-				throw std::out_of_range("Supplied memory block capacity limits are either invalid or outside of block_capacity_hard_limits()");
+				throw std::invalid_argument("Supplied memory block capacity limits are either invalid or outside of block_capacity_hard_limits()");
 			#else
 				std::terminate();
 			#endif
@@ -769,7 +769,7 @@ public:
 
 	reverse_iterator rbegin() noexcept
 	{
-		return (end_iterator.group_pointer != nullptr) ? ++reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return reverse_iterator(end_iterator);
 	}
 
 
@@ -783,7 +783,7 @@ public:
 
 	reverse_iterator rend() noexcept
 	{
-		return reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return reverse_iterator(begin_iterator);
 	}
 
 
@@ -797,14 +797,14 @@ public:
 
 	const_reverse_iterator crbegin() const noexcept
 	{
-		return (end_iterator.group_pointer != nullptr) ? ++const_reverse_iterator(end_iterator.group_pointer, end_iterator.element_pointer, end_iterator.skipfield_pointer) : const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return const_reverse_iterator(end_iterator);
 	}
 
 
 
 	const_reverse_iterator crend() const noexcept
 	{
-		return const_reverse_iterator(begin_iterator.group_pointer, begin_iterator.element_pointer - 1, begin_iterator.skipfield_pointer - 1);
+		return const_reverse_iterator(begin_iterator);
 	}
 
 
@@ -3845,19 +3845,35 @@ public:
 		hive_iterator & operator ++ ()
 		{
 			assert(group_pointer != nullptr); // covers uninitialised hive_iterator
-			skipfield_type skip = *(++skipfield_pointer);
 
-			if ((element_pointer += static_cast<size_type>(skip) + 1u) == to_aligned_pointer(group_pointer->skipfield) && group_pointer->next_group != nullptr) // ie. beyond end of current memory block. Second condition allows iterator to reach end(), which may be 1 past end of block, if block has been fully used and another block is not allocated
-			{
-				group_pointer = group_pointer->next_group;
-				const aligned_pointer_type elements = to_aligned_pointer(group_pointer->elements);
-				const skipfield_pointer_type skipfield = group_pointer->skipfield;
-				skip = *skipfield;
-				element_pointer = elements + skip;
-				skipfield_pointer = skipfield;
-			}
+			#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__) // This version creates faster release code under MSVC in some scenarios, but not other compilers
+				element_pointer += *(++skipfield_pointer) + 1;
+				skipfield_pointer += *skipfield_pointer;
 
-			skipfield_pointer += skip;
+				if (element_pointer == to_aligned_pointer(group_pointer->skipfield) && group_pointer->next_group != nullptr) // ie. beyond end of current memory block. Second condition allows iterator to reach end(), which may be 1 past end of block, if block has been fully used and another block is not allocated
+				{
+					group_pointer = group_pointer->next_group;
+					element_pointer = to_aligned_pointer(group_pointer->elements);
+					skipfield_pointer = group_pointer->skipfield;
+					element_pointer += *skipfield_pointer;
+					skipfield_pointer += *skipfield_pointer;
+				}
+			#else
+				skipfield_type skip = *(++skipfield_pointer);
+
+				if ((element_pointer += static_cast<size_type>(skip) + 1u) == to_aligned_pointer(group_pointer->skipfield) && group_pointer->next_group != nullptr)
+				{
+					group_pointer = group_pointer->next_group;
+					const aligned_pointer_type elements = to_aligned_pointer(group_pointer->elements);
+					const skipfield_pointer_type skipfield = group_pointer->skipfield;
+					skip = *skipfield;
+					element_pointer = elements + skip;
+					skipfield_pointer = skipfield;
+				}
+
+				skipfield_pointer += skip;
+			#endif
+
 			return *this;
 		}
 
@@ -3876,24 +3892,17 @@ public:
 		{
 			assert(group_pointer != nullptr);
 
-			--element_pointer;
-			const skipfield_pointer_type skipfield = group_pointer->skipfield;
-
-			if (--skipfield_pointer >= skipfield)
+			if (--skipfield_pointer >= group_pointer->skipfield) // ie. not already at beginning of group prior to decrementation
 			{
-				const skipfield_type skip = *skipfield_pointer;
-				element_pointer -= skip;
-				skipfield_pointer -= skip;
-			} // We now have to re-check below if this subtraction has taken us past the beginning of the block.
-
-			if (skipfield_pointer < skipfield && group_pointer->previous_group != NULL)
-			{
-				group_pointer = group_pointer->previous_group;
-				skipfield_pointer = group_pointer->skipfield + group_pointer->capacity - 1;
-				const skipfield_type skip = *skipfield_pointer;
-				element_pointer = (to_aligned_pointer(group_pointer->skipfield) - 1) - skip;
-				skipfield_pointer -= skip;
+				element_pointer -= static_cast<size_type>(*skipfield_pointer) + 1u;
+				if ((skipfield_pointer -= *skipfield_pointer) >= group_pointer->skipfield) return *this; // ie. skipfield jump value does not takes us beyond beginning of group
 			}
+
+			group_pointer = group_pointer->previous_group;
+			const skipfield_pointer_type skipfield = group_pointer->skipfield + group_pointer->capacity - 1;
+			const skipfield_type skip = *skipfield;
+			element_pointer = (to_aligned_pointer(group_pointer->skipfield) - 1) - skip;
+			skipfield_pointer = skipfield - skip;
 
 			return *this;
 		}
@@ -4270,7 +4279,8 @@ public:
 
 
 	// Reverse iterators:
-	// Note: despite iterator being trivially_copyable here, defining reverse_iterator via std::reverse_iterator<iterator> results in it not being trivially_copyable here, with substantially more codegen, at least under gcc/libstdc++.
+	// Note: despite iterator being trivially_copyable, defining reverse_iterator via std::reverse_iterator<iterator> results in it not being trivially_copyable here, at least under libstdc++.
+	// Hence we have a custom implementation.
 
 	template <bool is_const_r>
 	class hive_reverse_iterator
@@ -4336,17 +4346,13 @@ public:
 
 		hive_reverse_iterator (const hive_iterator<is_const_r> &source) noexcept:
 			current(source)
-		{
-			++(*this);
-		}
+		{}
 
 
 		template <bool is_const_rit = is_const_r, class = typename std::enable_if<is_const_rit>::type >
 		hive_reverse_iterator (const hive_iterator<false> &source) noexcept:
 			current(source)
-		{
-			++(*this);
-		}
+		{}
 
 
 		hive_reverse_iterator (hive_reverse_iterator &&source) noexcept = default;
@@ -4428,14 +4434,14 @@ public:
 
 		reference operator * () const noexcept
 		{
-			return *pointer_cast<pointer>(current.element_pointer);
+			return *--iterator(current);
 		}
 
 
 
 		pointer operator -> () const noexcept
 		{
-			return pointer_cast<pointer>(current.element_pointer);
+			return pointer_cast<pointer>(--iterator(current).element_pointer);
 		}
 
 
@@ -4476,7 +4482,7 @@ public:
 
 		hive_iterator<is_const_r> base() const noexcept
 		{
-			return (current.group_pointer != nullptr) ? ++(hive_iterator<is_const_r>(current)) : hive_iterator<is_const_r>(nullptr, nullptr, nullptr);
+			return hive_iterator<is_const_r>(current);
 		}
 
 
@@ -4532,13 +4538,6 @@ public:
  		{
  			return last.current.distance(current);
  		}
-
-
-	private:
-
-		// Used by rend(), etc:
-		hive_reverse_iterator(const group_pointer_type group_p, const aligned_pointer_type element_p, const skipfield_pointer_type skipfield_p) noexcept: current(group_p, element_p, skipfield_p) {}
-
 	}; // hive_reverse_iterator
 
 
