@@ -23,19 +23,6 @@
 #define __cpp_lib_hive
 
 
-#define PLF_EXCEPTIONS_SUPPORT
-
-#if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
-	#undef PLF_EXCEPTIONS_SUPPORT
-	#include <exception> // std::terminate
-#endif
-
-#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
-	// Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
-	#pragma warning ( push )
-	#pragma warning ( disable : 4127 )
-#endif
-
 #include <algorithm> // std::fill_n, std::sort, std::swap
 #include <cstdint> // uint_least16_t etc
 #include <cassert>	// assert
@@ -53,6 +40,21 @@
 #include <concepts>
 #include <compare> // std::strong_ordering
 #include <ranges>
+
+
+
+#define PLF_EXCEPTIONS_SUPPORT
+
+#if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
+	#undef PLF_EXCEPTIONS_SUPPORT
+	#include <exception> // std::terminate
+#endif
+
+#if defined(_MSC_VER) && !defined(__clang__) && !defined(__GNUC__)
+	// Suppress incorrect (unfixed MSVC bug at warning level 4) warnings re: constant expressions in constexpr-if statements
+	#pragma warning ( push )
+	#pragma warning ( disable : 4127 )
+#endif
 
 
 
@@ -176,6 +178,14 @@ namespace std
 	{
 		return first.distance(last);
 	}
+
+
+	template <plf::hive_iterator_concept it_type>
+	typename iterator_traits<it_type>::difference_type distance(const std::move_iterator<it_type> first, const std::move_iterator<it_type> last)
+	{
+		return first.base().distance(last.base());
+	}
+
 }
 
 
@@ -1761,13 +1771,13 @@ public:
 
 
 
-	// Range insert, move_iterator overload:
+	// Range insert, move_iterator overload (allows hive to use the faster internal overload for std::distance, otherwise the standard libraries will use the bidirectional std::distance overload):
 
-	template <class iterator_type>
-	void insert(const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
-	{
-		range_insert(first, static_cast<size_type>(std::distance(first.base(), last.base())));
-	}
+ 	template <class iterator_type>
+ 	void insert(const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
+ 	{
+ 		range_insert(first, static_cast<size_type>(std::distance(first.base(), last.base())));
+ 	}
 
 
 
@@ -2585,13 +2595,13 @@ public:
 
 
 
-	// Range assign, move_iterator overload:
+	// Range assign, move_iterator overload (logic same as range insert, move_iterator):
 
-	template <class iterator_type>
-	void assign (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
-	{
-		range_assign(first, static_cast<size_type>(std::distance(first.base(),last.base())));
-	}
+// 	template <class iterator_type>
+// 	void assign (const std::move_iterator<iterator_type> first, const std::move_iterator<iterator_type> last)
+// 	{
+// 		range_assign(first, static_cast<size_type>(std::distance(first.base(),last.base())));
+// 	}
 
 
 
@@ -3726,18 +3736,21 @@ public:
 		friend reverse_iterator;
 		friend const_reverse_iterator;
 
-		template <hive_iterator_concept it_type, typename distance_type>
+
+		template <plf::hive_iterator_concept it_type, typename distance_type>
 		friend void std::advance(it_type &it, const distance_type distance);
 
-		template <hive_iterator_concept it_type>
+		template <plf::hive_iterator_concept it_type>
 		friend it_type std::next(it_type it, const typename std::iterator_traits<it_type>::difference_type distance);
 
-		template <hive_iterator_concept it_type>
+		template <plf::hive_iterator_concept it_type>
 		friend it_type std::prev(it_type it, const typename std::iterator_traits<it_type>::difference_type distance);
 
-		template <hive_iterator_concept it_type>
-		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
+		template <plf::hive_iterator_concept it_type>
+		friend typename std::iterator_traits<it_type>::difference_type std::distance(const std::move_iterator<it_type> first, const std::move_iterator<it_type> last);
 
+		template <plf::hive_iterator_concept it_type>
+		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
 
 
 		hive_iterator() noexcept = default;
@@ -3970,6 +3983,45 @@ public:
 
 
 
+		// These 3 functions are used by advance:
+
+		void set_iterator_to_first_element_in_group() noexcept
+		{
+			element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield);
+			skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+		}
+
+
+
+		void set_element_location_from_skipfield() noexcept
+		{
+			element_pointer = to_aligned_pointer(group_pointer->elements) + (skipfield_pointer - group_pointer->skipfield);
+		}
+
+
+
+		void advance_from_group_beginning(skipfield_type distance) noexcept
+		{
+			if (group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // ie. if there are no erasures in the group
+			{
+				element_pointer = to_aligned_pointer(group_pointer->elements) + distance;
+				skipfield_pointer = group_pointer->skipfield + distance;
+			}
+			else
+			{
+				skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield); // in case first element(s) in block are erased
+
+				do
+				{
+					skipfield_pointer += *++skipfield_pointer;
+				} while(--distance != 0);
+
+				set_element_location_from_skipfield();
+			}
+		}
+
+
+
 		// Advance implementation:
 
 		void advance(difference_type distance) // Cannot be noexcept due to the possibility of an uninitialized iterator
@@ -3993,7 +4045,7 @@ public:
 
 				// Note: incrementing element_pointer is avoided until necessary to avoid needless calculations.
 
-				if (group_pointer->next_group == nullptr && element_pointer == to_aligned_pointer(group_pointer->skipfield)) return; // Check if we're already beyond back of final block
+				if (group_pointer->next_group == nullptr && element_pointer == to_aligned_pointer(group_pointer->skipfield)) return; // Check if we're already at end() (or at least one possible location of end())
 
 				// Special case for initial element pointer and initial group (we don't know how far into the group the element pointer is)
 				if (element_pointer != to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield)) // ie. != first non-erased element in group - otherwise we skip this section and just treat the first block as we would an intermediary block
@@ -4007,11 +4059,10 @@ public:
 							element_pointer += distance;
 							skipfield_pointer += distance;
 							return;
-						}
-						else if (group_pointer->next_group == nullptr) // either we've reached end() or gone beyond it, so bound to back of block
+						} // distance >= distance_from_end
+						else if (group_pointer->next_group == nullptr) // back block, so either we're going to reach end() or go beyond it, so bound to end() by iterating the group size from the beginning of the group. Not ideal, but we can't detect end() from within iterator otherwise, at least in this implementation :(
 						{
-							element_pointer += distance_from_end;
-							skipfield_pointer += distance_from_end;
+							advance_from_group_beginning(group_pointer->size);
 							return;
 						}
 						else
@@ -4025,8 +4076,7 @@ public:
 
 						while(true)
 						{
-							++skipfield_pointer;
-							skipfield_pointer += *skipfield_pointer;
+							skipfield_pointer += *++skipfield_pointer;
 							--distance;
 
 							if (skipfield_pointer == endpoint)
@@ -4035,7 +4085,7 @@ public:
 							}
 							else if (distance == 0)
 							{
-								element_pointer = to_aligned_pointer(group_pointer->elements) + (skipfield_pointer - group_pointer->skipfield);
+								set_element_location_from_skipfield();
 								return;
 							}
 						}
@@ -4051,8 +4101,7 @@ public:
 
 					if (distance == 0)
 					{
-						element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield);
-						skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+						set_iterator_to_first_element_in_group();
 						return;
 					}
 				}
@@ -4061,44 +4110,26 @@ public:
 				// Intermediary groups - at the start of this code block and the subsequent block, the position of the iterator is assumed to be the first non-erased element in the current group:
 				while (static_cast<difference_type>(group_pointer->size) <= distance)
 				{
-					if (group_pointer->next_group == nullptr) // either we've reached end() or gone beyond it, so bound to end of block
+					if (group_pointer->next_group == nullptr) // ie. either we would reach end() or go beyond it, so bound to end()
 					{
-						element_pointer = to_aligned_pointer(group_pointer->skipfield);
-						skipfield_pointer = group_pointer->skipfield + group_pointer->capacity;
+						advance_from_group_beginning(group_pointer->size);
 						return;
 					}
-					else if ((distance -= group_pointer->size) == 0)
+
+					distance -= group_pointer->size;
+					group_pointer = group_pointer->next_group;
+
+					if (distance == 0)
 					{
-						group_pointer = group_pointer->next_group;
-						element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield);
-						skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+						set_iterator_to_first_element_in_group();
 						return;
-					}
-					else
-					{
-						group_pointer = group_pointer->next_group;
 					}
 				}
 
 
 				// Final group (if not already reached):
-				if (group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // No erasures in this group, use straight pointer addition
-				{
-					element_pointer = to_aligned_pointer(group_pointer->elements) + distance;
-					skipfield_pointer = group_pointer->skipfield + distance;
-				}
-				else	 // We already know size > distance due to the intermediary group checks above - safe to ignore endpoint check condition while incrementing here:
-				{
-					skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
-
-					do
-					{
-						++skipfield_pointer;
-						skipfield_pointer += *skipfield_pointer;
-					} while(--distance != 0);
-
-					element_pointer = to_aligned_pointer(group_pointer->elements) + (skipfield_pointer - group_pointer->skipfield);
-				}
+				// We already know group size > distance due to the intermediary group checks above - so it's safe to ignore endpoint check condition while incrementing here.
+				advance_from_group_beginning(static_cast<skipfield_type>(distance));
 			}
 			else if (distance < 0)
 			{
@@ -4135,20 +4166,18 @@ public:
 					{
 						for (const skipfield_pointer_type begin = group_pointer->skipfield + *(group_pointer->skipfield); skipfield_pointer != begin;)
 						{
-							--skipfield_pointer;
-							skipfield_pointer -= *skipfield_pointer;
+							skipfield_pointer -= *--skipfield_pointer;
 
 							if (--distance == 0)
 							{
-								element_pointer = to_aligned_pointer(group_pointer->elements) + (skipfield_pointer - group_pointer->skipfield);
+								set_element_location_from_skipfield();
 								return;
 							}
 						}
 
 						if (group_pointer->previous_group == nullptr)
 						{
-							element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield); // This is first group, so bound to begin() (just in case final decrement took us before begin())
-							skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+							set_iterator_to_first_element_in_group(); // This is first group, so bound to begin() (just in case final decrement took us before begin())
 							return;
 						}
 					}
@@ -4162,8 +4191,7 @@ public:
 				{
 					if (group_pointer->previous_group == nullptr) // we've gone beyond begin(), so bound to it
 					{
-						element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield);
-						skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+						set_iterator_to_first_element_in_group();
 						return;
 					}
 
@@ -4175,8 +4203,7 @@ public:
 				// Final group (if not already reached):
 				if (static_cast<difference_type>(group_pointer->size) == distance) // go to front of group
 				{
-					element_pointer = to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield);
-					skipfield_pointer = group_pointer->skipfield + *(group_pointer->skipfield);
+					set_iterator_to_first_element_in_group();
 				}
 				else if (group_pointer->free_list_head == std::numeric_limits<skipfield_type>::max()) // ie. no erased elements in this group
 				{
@@ -4189,11 +4216,10 @@ public:
 
 					do
 					{
-						--skipfield_pointer;
-						skipfield_pointer -= *skipfield_pointer;
+						skipfield_pointer -= *--skipfield_pointer;
 					} while(--distance != 0);
 
-					element_pointer = to_aligned_pointer(group_pointer->elements) + (skipfield_pointer - group_pointer->skipfield);
+					set_element_location_from_skipfield();
 				}
 			}
 		}
@@ -4300,39 +4326,20 @@ public:
 
 		friend class hive;
 
+		template <plf::hive_iterator_concept it_type, typename distance_type>
+		friend void std::advance(it_type &it, const distance_type distance);
 
-		template <class distance_type>
-		friend void advance(hive_reverse_iterator &it, const distance_type distance)
-		{
-			it.advance(static_cast<difference_type>(distance));
-		}
+		template <plf::hive_iterator_concept it_type>
+		friend it_type std::next(it_type it, const typename std::iterator_traits<it_type>::difference_type distance);
 
+		template <plf::hive_iterator_concept it_type>
+		friend it_type std::prev(it_type it, const typename std::iterator_traits<it_type>::difference_type distance);
 
+		template <plf::hive_iterator_concept it_type>
+		friend typename std::iterator_traits<it_type>::difference_type std::distance(const std::move_iterator<it_type> first, const std::move_iterator<it_type> last);
 
-		friend hive_reverse_iterator next(const hive_reverse_iterator &it, const difference_type distance)
-		{
-			hive_reverse_iterator return_iterator(it);
-			return_iterator.advance(static_cast<difference_type>(distance));
-			return return_iterator;
-		}
-
-
-
-		template <class distance_type>
-		friend hive_reverse_iterator prev(const hive_reverse_iterator &it, const difference_type distance)
-		{
-			hive_reverse_iterator return_iterator(it);
-			return_iterator.advance(static_cast<difference_type>(distance));
-			return return_iterator;
-		}
-
-
-
-		friend typename hive_reverse_iterator::difference_type distance(const hive_reverse_iterator &first, const hive_reverse_iterator &last)
-		{
-			return last.distance(first);
-		}
-
+		template <plf::hive_iterator_concept it_type>
+		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
 
 
 		hive_reverse_iterator (const hive_reverse_iterator &source) noexcept = default;
@@ -4526,6 +4533,8 @@ public:
 		}
 
 
+
+	private:
 
 		void advance(difference_type distance)
 		{
