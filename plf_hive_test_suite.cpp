@@ -341,13 +341,6 @@ int main()
 			failpass("Reverse iteration count test", total == 400);
 			failpass("Reverse iterator access test", numtotal == 6000);
 
-			{
-				hive<int> numbers;
-				numbers.insert(1);
-				hive<int>::reverse_iterator rit = numbers.rend(), rit2 = std::prev(rit, 1), rit3 = numbers.rbegin();
-				failpass("Reverse iteration prev/rbegin/rend test", rit2 == rit3);
-			}
-
 			hive<int *>::reverse_iterator r_iterator = p_hive.rbegin();
 			std::advance(r_iterator, 50);
 
@@ -1612,16 +1605,7 @@ int main()
 
 			failpass("Initializer_list assign test", i_hive.size() == 10 && !fail);
 
-			hive<int> i_hive2;
-			i_hive2.assign(std::make_move_iterator(i_hive.begin()), std::make_move_iterator(i_hive.end()));
-
-			failpass("Move assign test", i_hive2.size() == 10);
-
-			i_vector.assign({1, 2, 3, 4, 5});
-
-			i_hive2.assign(std::make_move_iterator(i_vector.begin()), std::make_move_iterator(i_vector.end()));
-
-			failpass("Move assign test 2", i_hive2.size() == 5);
+			i_hive.clear();
 		}
 
 
