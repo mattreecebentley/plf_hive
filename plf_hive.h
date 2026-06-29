@@ -4045,7 +4045,7 @@ public:
 
 				// Note: incrementing element_pointer is avoided until necessary to avoid needless calculations.
 
-				if (group_pointer->next_group == nullptr && element_pointer == to_aligned_pointer(group_pointer->skipfield)) return; // Check if we're already at end() (or at least one possible location of end())
+				if (group_pointer->next_group == nullptr && element_pointer == to_aligned_pointer(group_pointer->skipfield)) return; // Check if we're already at end()
 
 				// Special case for initial element pointer and initial group (we don't know how far into the group the element pointer is)
 				if (element_pointer != to_aligned_pointer(group_pointer->elements) + *(group_pointer->skipfield)) // ie. != first non-erased element in group - otherwise we skip this section and just treat the first block as we would an intermediary block
@@ -4060,9 +4060,10 @@ public:
 							skipfield_pointer += distance;
 							return;
 						} // distance >= distance_from_end
-						else if (group_pointer->next_group == nullptr) // back block, so either we're going to reach end() or go beyond it, so bound to end() by iterating the group size from the beginning of the group. Not ideal, but we can't detect end() from within iterator otherwise, at least in this implementation :(
+						else if (group_pointer->next_group == nullptr) // back block, so either we're going to reach end() or go beyond it, so bound to back of block
 						{
-							advance_from_group_beginning(group_pointer->size);
+							element_pointer += distance_from_end;
+							skipfield_pointer += distance_from_end;
 							return;
 						}
 						else
