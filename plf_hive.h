@@ -59,8 +59,8 @@ namespace plf
 	template <class T>
 	concept hive_iterator_concept = requires { typename T::hive_iterator_tag; };
 
-	#ifndef PLF_RANGES // To ensure interoperability with other plf lib containers
-		#define PLF_RANGES
+	#ifndef PLF_TOOLS // To ensure interoperability with other plf lib containers
+		#define PLF_TOOLS
 
 		// For matching ranges which return input_iterator's and match the container's element type:
 		template <typename range_type, class element_type>
@@ -112,7 +112,7 @@ namespace plf
 		template <class allocator_type, class iterator_type, class iterator_type2>
 		void uninitialized_move(iterator_type begin, const iterator_type end, iterator_type2 destination, allocator_type &alloc)
 		{
-			plf:uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
+			plf::uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
 		}
 
 
