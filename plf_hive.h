@@ -112,7 +112,7 @@ namespace plf
 		template <class allocator_type, class iterator_type, class iterator_type2>
 		void uninitialized_move(iterator_type begin, const iterator_type end, iterator_type2 destination, allocator_type &alloc)
 		{
-			uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
+			plf:uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
 		}
 
 
@@ -702,7 +702,7 @@ public:
 
 	// Ranges v3 constructors:
 
-	template<compatible_range<element_type> range_type>
+	template<plf::compatible_range<element_type> range_type>
 	hive(plf::ranges::from_range_t, range_type &&rg, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
@@ -722,7 +722,7 @@ public:
 
 
 
-	template<compatible_range<element_type> range_type>
+	template<plf::compatible_range<element_type> range_type>
 	hive(plf::ranges::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
 		hive(plf::ranges::from_range, std::move(rg), block_capacity_default_limits(), alloc)
 	{}
@@ -1802,7 +1802,7 @@ public:
 
 
 
-	template<compatible_range<element_type> range_type>
+	template<plf::compatible_range<element_type> range_type>
 	void insert_range(range_type &&the_range)
 	{
 		range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -2626,7 +2626,7 @@ public:
 
 
 
-	template<compatible_range<element_type> range_type>
+	template<plf::compatible_range<element_type> range_type>
 	void assign_range(range_type &&the_range)
 	{
 		range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -2859,7 +2859,7 @@ private:
 
 		if constexpr ((std::is_trivially_copyable<allocator_type>::value || std::allocator_traits<allocator_type>::is_always_equal::value) && std::is_trivially_copyable<group_pointer_type>::value)
 		{
-			std::memcpy(static_cast<void *>(this), &source, sizeof(hive));
+			std::memcpy(static_cast<void *>(this), static_cast<void *>(&source), sizeof(hive));
 		}
 		else
 		{
@@ -3659,9 +3659,9 @@ public:
 		if constexpr (std::allocator_traits<allocator_type>::is_always_equal::value && std::is_trivially_copyable<group_pointer_type>::value) // if all pointer types are trivial we can just copy using memcpy - avoids constructors/destructors etc and is faster
 		{
 			char temp[sizeof(hive)];
-			std::memcpy(&temp, static_cast<void *>(this), sizeof(hive));
+			std::memcpy(static_cast<void *>(&temp), static_cast<void *>(this), sizeof(hive));
 			std::memcpy(static_cast<void *>(this), static_cast<void *>(&source), sizeof(hive));
-			std::memcpy(static_cast<void *>(&source), &temp, sizeof(hive));
+			std::memcpy(static_cast<void *>(&source), static_cast<void *>(&temp), sizeof(hive));
 		}
 		else if constexpr (std::is_move_assignable<group_pointer_type>::value && std::is_move_constructible<group_pointer_type>::value)
 		{
