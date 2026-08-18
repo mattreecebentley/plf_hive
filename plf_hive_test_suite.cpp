@@ -231,17 +231,17 @@ int main()
 					}
 				}
 
-				int d_size = static_cast<int>(d_hive.size());
+				int d_size = static_cast<int>(d_colony.size());
 
 				for (int counter = 0; counter != 10000; ++counter)
 				{
 					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
-					hive<int>::iterator first = d_hive.begin(), last;
-					std::advance(first, dist1);
+					colony<int>::iterator first = d_colony.begin(), last;
+					advance(first, dist1);
 					last = first;
-					std::advance(last, dist2);
+					advance(last, dist2);
 
-					const int dist = static_cast<int>(std::distance(first, last));
+					const int dist = static_cast<int>(distance(first, last));
 
 					if (dist != dist2)
 					{
@@ -253,6 +253,26 @@ int main()
 
 				failpass("Positive distance overload fuzz-test", true);
 
+
+				for (int counter = 0; counter != 10000; ++counter)
+				{
+					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
+					colony<int>::iterator first = d_colony.end(), last;
+					advance(first, -dist1);
+					last = first;
+					advance(last, -dist2);
+
+					const int dist = static_cast<int>(distance(last, first));
+
+					if (dist != dist2)
+					{
+						printf("Negative distance overload fuzz-test failed, real distance = %d, reported distance = %d, counter = %d, suite loop = %d", dist2, dist, counter, looper);
+						getchar();
+						abort();
+					}
+				}
+
+				failpass("Negative distance overload fuzz-test", true);
 
 				for (hive<int>::iterator current = d_hive.begin(), end = d_hive.end(); current!= end;)
 				{
@@ -634,7 +654,6 @@ int main()
 
 			failpass("Alternating insert/erase test", i_hive.size() == 45001);
 
-
 			do
 			{
 				for (hive<int>::iterator the_iterator = i_hive.begin(); the_iterator != i_hive.end();)
@@ -649,7 +668,7 @@ int main()
 						the_iterator = i_hive.erase(the_iterator);
 					}
 				}
-			} while (!i_hive.empty());;
+			} while (!i_hive.empty());
 
 			failpass("Random insert/erase till empty test", i_hive.size() == 0);
 
@@ -659,7 +678,6 @@ int main()
 			failpass("Insert post-erase test", i_hive.size() == 500000);
 			hive<int>::iterator it2 = i_hive.begin();
 			std::advance(it2, 250000);
-
 
 			for (; it2 != i_hive.end();)
 			{
@@ -1147,7 +1165,7 @@ int main()
 			failpass("Non-trivial type erase half of all elements", ss_nt.size() == 5000);
 
 			ss_nt.assign(10000, ss);
-			
+
 			failpass("Non-trivial type assign", ss_nt.size() == 10000);
 
 			for (hive<small_struct_non_trivial>::iterator ss_it = ss_nt.begin(); ss_it != ss_nt.end(); ++ss_it)
@@ -1157,7 +1175,7 @@ int main()
 
 			failpass("Non-trivial type erase half of all elements post-assign", ss_nt.size() == 5000);
 
-			
+
 
 			for (unsigned int loop_counter = 0; loop_counter != 50; ++loop_counter)
 			{
@@ -2176,7 +2194,7 @@ int main()
 
 		{
 			title2("range/fill insert partial recovery tests");
-			
+
 			hive<exceptions_test> i_hive;
 			exceptions_test input_data[10] = {6, 6, 6, 6, 4, 6, 6, 6, 6, 1};
 
@@ -2186,7 +2204,7 @@ int main()
 			}
 			catch(...)
 			{} // do nothing
-			
+
 			int accumulator = 0;
 			for (hive<exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current)
 			{
