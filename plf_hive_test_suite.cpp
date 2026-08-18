@@ -231,12 +231,12 @@ int main()
 					}
 				}
 
-				int d_size = static_cast<int>(d_colony.size());
+				int d_size = static_cast<int>(d_hive.size());
 
 				for (int counter = 0; counter != 10000; ++counter)
 				{
 					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
-					colony<int>::iterator first = d_colony.begin(), last;
+					hive<int>::iterator first = d_hive.begin(), last;
 					advance(first, dist1);
 					last = first;
 					advance(last, dist2);
@@ -257,7 +257,7 @@ int main()
 				for (int counter = 0; counter != 10000; ++counter)
 				{
 					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
-					colony<int>::iterator first = d_colony.end(), last;
+					hive<int>::iterator first = d_hive.end(), last;
 					advance(first, -dist1);
 					last = first;
 					advance(last, -dist2);
