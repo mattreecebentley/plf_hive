@@ -237,11 +237,11 @@ int main()
 				{
 					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
 					hive<int>::iterator first = d_hive.begin(), last;
-					advance(first, dist1);
+					std::advance(first, dist1);
 					last = first;
-					advance(last, dist2);
+					std::advance(last, dist2);
 
-					const int dist = static_cast<int>(distance(first, last));
+					const int dist = static_cast<int>(std::distance(first, last));
 
 					if (dist != dist2)
 					{
@@ -258,11 +258,11 @@ int main()
 				{
 					const int dist1 = rand() % (d_size - 2), dist2 = rand() % ((d_size - 2) - dist1);
 					hive<int>::iterator first = d_hive.end(), last;
-					advance(first, -dist1);
+					std::advance(first, -dist1);
 					last = first;
-					advance(last, -dist2);
+					std::advance(last, -dist2);
 
-					const int dist = static_cast<int>(distance(last, first));
+					const int dist = static_cast<int>(std::distance(last, first));
 
 					if (dist != dist2)
 					{
