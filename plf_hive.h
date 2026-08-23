@@ -2228,7 +2228,7 @@ public:
 					begin_iterator = iterator(iterator2.group_pointer, iterator2.element_pointer, iterator2.skipfield_pointer);
 				}
 			}
-			else // ie. full block erasure
+			else // ie. full block erasure - this can only happen if iterator2 = end() - as it's not valid for an iterator to be pointing one-past the end of a block unless that is the current end().
 			{
 				if constexpr (!std::is_trivially_destructible<element_type>::value)
 				{
@@ -2482,10 +2482,10 @@ private:
 
 						if (--size == 0)
 						{
-							if constexpr (!std::is_trivially_destructible<element_type>::value) destroy_remainder(++iterator(it)); // ++ to potentially allow for skipping over a skipblock
-							++it.element_pointer; // As opposed to just incrementing, as we do here
-							++it.skipfield_pointer;
-							finish_range_assign(it);
+							if constexpr (!std::is_trivially_destructible<element_type>::value) destroy_remainder(++iterator(current)); // ++ to potentially allow for skipping over a skipblock
+							++current.element_pointer; // As opposed to just incrementing, as we do here
+							++current.skipfield_pointer;
+							finish_range_assign(current);
 							return;
 						}
 
