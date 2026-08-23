@@ -2228,7 +2228,7 @@ public:
 					begin_iterator = iterator(iterator2.group_pointer, iterator2.element_pointer, iterator2.skipfield_pointer);
 				}
 			}
-			else // ie. full block erasure - this can only be the case if iterator2 = end() - as it's not possible for an iterator to be pointing to one-past the end of a block unless that is the current end()
+			else // ie. full block erasure
 			{
 				if constexpr (!std::is_trivially_destructible<element_type>::value)
 				{
