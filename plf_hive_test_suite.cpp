@@ -943,10 +943,16 @@ int main()
 				i_hive.insert(counter);
 			}
 
+
 			for (hive<int>::iterator it = i_hive.begin(); it < i_hive.end(); ++it)
 			{
 				it = i_hive.erase(it);
 			}
+
+			counter = 0;
+			for (hive<int>::iterator it = i_hive.begin(); it != i_hive.end(); ++it) ++counter;
+
+			failpass("Half-erase hive, every 2nd element", counter == 1500 && i_hive.size() == 1500);
 
 			it2 = it1 = i_hive.begin();
 
@@ -955,11 +961,7 @@ int main()
 			i_hive.erase(it1, it2);
 
 			counter = 0;
-
-			for (hive<int>::iterator it = i_hive.begin(); it != i_hive.end(); ++it)
-			{
-				++counter;
-			}
+			for (hive<int>::iterator it = i_hive.begin(); it != i_hive.end(); ++it) ++counter;
 
 			failpass("Range-erase with hive already half-erased, alternating erasures", counter == 904 && i_hive.size() == 904);
 
@@ -1723,7 +1725,7 @@ int main()
 
 			failpass("block_capacity_limits test", temp_limits.min == 200 && temp_limits.max == 255);
 
-			temp_limits = plf::hive<int>::block_capacity_hard_limits();
+			temp_limits = plf::hive<char>::block_capacity_hard_limits();
 
 			failpass("block_capacity_hard_limits test", temp_limits.min == 3 && temp_limits.max == 255);
 
