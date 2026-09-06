@@ -28,7 +28,7 @@
 #include <cassert>	// assert
 #include <cstring>	// memset, memcpy, size_t
 #include <limits>  // std::numeric_limits
-#include <memory> // std::allocator_traits, std::to_address
+#include <memory> // std::allocator_traits, std::to_address, std::uninitialized_fill_n
 #include <iterator> // std::bidirectional_iterator_tag, iterator_traits, make_move_iterator, std::distance for range insert
 #include <stdexcept> // std::length_error, std::out_of_range
 #include <functional> // std::less
@@ -44,7 +44,7 @@
 
 #define PLF_HIVE_EXCEPTIONS_SUPPORT
 
-#if ((defined(__clang__) || defined(__GNUC__)) && !defined(__EXCEPTIONS)) || (defined(_MSC_VER) && !defined(_CPPUNWIND))
+#if !(defined(__cpp_exceptions) || defined(__EXCEPTIONS) || defined(_CPPUNWIND))
 	#undef PLF_HIVE_EXCEPTIONS_SUPPORT
 	#include <exception> // std::terminate
 #endif
