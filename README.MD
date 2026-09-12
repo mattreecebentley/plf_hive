@@ -10,14 +10,12 @@ The differences in plf::hive are as follows:
 * advance, prev, next and distance are std:: overloads, rather than hidden friends selected via ADL. This is only possible under C++20 and above. std::distance overload doesn't support negative distances, the two iterators must be swapped prior to distance call if first is > last.
 * The following public functions are removed: is_active, block_capacity_default_min(), block_capacity_default_max(), block_metadata_memory, block_allocation_amount, max_elements_per_allocation.
 
-Otherwise hive should follow the same rules as colony and be used in the same way. Colony documentation is here:
+Otherwise hive should follow the same rules as colony and be used in much the same way. Colony documentation is here:
 https://plflib.org/colony.htm
 
 The std::advance overload for hive is fully bounded ie. will not go before begin()/rend() or beyond end()/rbegin(). This is mostly computationally inexpensive. One potentially-expensive bounding operation, designed to detect whether the supplied iterator is == end() when advance is positive, can be disabled by defining the macro PLF_HIVE_DISABLE_EXPENSIVE_BOUNDING before header inclusion.
 
-Note: In terms of the Microsoft compiler, hive requires Visual Studio 2022 or later to compile properly (early versions have an unresolved bug).
-
-Note2: Use plf::ranges::range_from in the parameters when calling rangesv3 constructor overloads. This will be updated with std::range_from_t when that feature becomes widely available in C++23-compliant libraries.
+Note: Requires a standard library implementation which supports std::range_from and std::range_from_t.
 
 
 ![Infographic describing the container](https://i.imgur.com/eXSlOdi.png)
