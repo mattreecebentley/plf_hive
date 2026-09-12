@@ -57,83 +57,9 @@ namespace plf
 	template <class T>
 	concept hive_iterator_concept = requires { typename T::hive_iterator_tag; };
 
-	#ifndef PLF_TOOLS // To ensure interoperability with other plf lib containers
-		#define PLF_TOOLS
-
-		// For matching ranges which return input_iterator's and match the container's element type:
-		template <typename range_type, class element_type>
-		concept compatible_range = std::ranges::input_range<range_type> && std::convertible_to<std::ranges::range_reference_t<range_type>, element_type>;
-
-		// Until such point as standard libraries ubiquitously include std::from_range_t, including this so the rangesv3 constructor overloads will work unambiguously:
-		namespace ranges
-		{
-			struct from_range_t {};
-			inline constexpr from_range_t from_range;
-		}
-	#endif
-
-
-
-	#ifndef PLF_UNINITIALIZED_TOOLS
-		#define PLF_UNINITIALIZED_TOOLS
-
-		// Allocator-aware uninitialized_copy/move/fill_n:
-
-		// Template to check whether an allocator has a custom construct function, or just relies on allocator_traits (eg. std::allocator since C++20):
-		template<typename allocator_type, typename = std::void_t<>>
-		struct allocator_has_construct : std::false_type {};
-
-		// Tests for dummy type int:
-		template<typename allocator_type>
-		struct allocator_has_construct< allocator_type, std::void_t<decltype(std::declval<allocator_type&>().construct(std::declval<int*>(), std::declval<int>()))> > : std::true_type {};
-
-
-
-		template <class allocator_type, class iterator_type, class iterator_type2>
-		void uninitialized_copy(iterator_type begin, const iterator_type end, iterator_type2 destination, [[maybe_unused]] allocator_type &alloc)
-		{
-			if constexpr (!allocator_has_construct<allocator_type>::value) // If allocator has no construct method, we can take advantage of optimized routines for POD types in library implementation:
-			{
-				std::uninitialized_copy(begin, end, destination);
-			}
-			else
-			{
-				for (; begin != end; ++begin, ++destination)
-				{
-					std::allocator_traits<allocator_type>::construct(alloc, std::to_address(destination), *begin);
-				}
-			}
-		}
-
-
-
-		template <class allocator_type, class iterator_type, class iterator_type2>
-		void uninitialized_move(iterator_type begin, const iterator_type end, iterator_type2 destination, allocator_type &alloc)
-		{
-			plf::uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
-		}
-
-
-
-		template <class allocator_type, class iterator_type, class element_type>
-		void uninitialized_fill_n(iterator_type begin, std::size_t size, const element_type &element, [[maybe_unused]] allocator_type &alloc)
-		{
-			if constexpr (!allocator_has_construct<allocator_type>::value)
-			{
-				std::uninitialized_fill_n(begin, size, element);
-			}
-			else
-			{
-				for (; size != 0; ++begin, --size)
-				{
-					std::allocator_traits<allocator_type>::construct(alloc, std::to_address(begin), element);
-				}
-			}
-		}
-
-	#endif
-
-
+	// For matching ranges which return input_iterator's and match the container's element type:
+	template <typename range_type, class element_type>
+	concept hive_compatible_range = std::ranges::input_range<range_type> && std::convertible_to<std::ranges::range_reference_t<range_type>, element_type>;
 }
 
 
@@ -317,7 +243,7 @@ private:
 		skipfield_pointer_type					skipfield;			// Skipfield storage. The element and skipfield arrays are allocated contiguously, in a single allocation, in this implementation, hence the skipfield pointer also functions as a 'one-past-end' pointer for the elements array. This is present before elements in the group struct as it is referenced constantly by the ++ operator, hence having it first results in a minor performance increase.
 		group_pointer_type						next_group;			// Next group in the linked list of all groups. nullptr if no following group. 2nd in struct because it is so frequently used during iteration.
 		const aligned_struct_pointer_type	elements;			// Element storage.
-		group_pointer_type						previous_group;		// Previous group in the linked list of all groups. nullptr if no preceding group.
+		group_pointer_type						previous_group;		// Previous group in the linked list of all groups. nullptr if no preceding group. And yes, there is a small but repeatable benchmark performance difference to placing the member here, instead of with next_group, due to the fact that it's used less. Not an arbitrary decision.
 		skipfield_type 							free_list_head;		// The index of the last erased element in the group. The last erased element will, in turn, contain the number of the index of the next erased element, and so on. If this is == maximum skipfield_type value then free_list is empty ie. no erasures have occurred in the group (or if they have, the erased locations have subsequently been reused via insert/emplace/assign).
 		const skipfield_type 					capacity;			// The element capacity of this particular group - can also be calculated from reinterpret_cast<aligned_pointer_type>(group->skipfield) - group->elements, however this space is effectively free due to struct padding and the sizeof(skipfield_type), and calculating it once is faster in benchmarking.
 		skipfield_type 							size; 				// The total number of active elements in group - changes with insert and erase commands - used to check for empty group in erase function, as an indication to remove the group. Also used in combination with capacity to check if group is full, which is used in the next/previous/advance/distance overloads, and range-erase.
@@ -721,8 +647,8 @@ public:
 
 	// Ranges v3 constructors:
 
-	template<plf::compatible_range<element_type> range_type>
-	hive(plf::ranges::from_range_t, range_type &&rg, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
+	template<hive_compatible_range<element_type> range_type>
+	hive(std::from_range_t, range_type &&rg, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
 		unused_groups_head(nullptr),
@@ -741,9 +667,9 @@ public:
 
 
 
-	template<plf::compatible_range<element_type> range_type>
-	hive(plf::ranges::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
-		hive(plf::ranges::from_range, std::move(rg), block_capacity_default_limits(), alloc)
+	template<hive_compatible_range<element_type> range_type>
+	hive(std::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
+		hive(std::from_range, std::move(rg), block_capacity_default_limits(), alloc)
 	{}
 
 
@@ -1275,6 +1201,62 @@ public:
 
 private:
 
+	// Allocator-aware uninitialized_copy/move/fill_n - C++23-and-above-only adaptations of the equivalent functions in plf_tools:
+
+	// Template to check whether an allocator has a custom construct function, or just relies on allocator_traits (eg. std::allocator since C++20):
+	template<typename alloc_type, typename = std::void_t<>>
+	struct allocator_has_construct : std::false_type {};
+
+	// Tests for dummy type int:
+	template<typename alloc_type>
+	struct allocator_has_construct< alloc_type, std::void_t<decltype(std::declval<alloc_type&>().construct(std::declval<int*>(), std::declval<int>()))> > : std::true_type {};
+
+
+
+	template <class iterator_type2>
+	void uninitialized_copy(iterator begin, const iterator end, iterator_type2 destination)
+	{
+		if constexpr (!allocator_has_construct<allocator_type>::value) // If allocator has no construct method, we can take advantage of optimized routines for POD types in library implementation:
+		{
+			std::uninitialized_copy(begin, end, destination);
+		}
+		else
+		{
+			do
+			{
+				construct_element(destination++, *begin);
+			} while (++begin != end);
+		}
+	}
+
+
+
+	template <class iterator_type2>
+	void uninitialized_move(iterator begin, const iterator end, iterator_type2 destination, allocator_type& alloc)
+	{
+		uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
+	}
+
+
+
+	template <typename pointer_type>
+	void uninitialized_fill_n(pointer_type begin, std::size_t size, const element_type& element)
+	{
+		if constexpr (!allocator_has_construct<allocator_type>::value)
+		{
+			std::uninitialized_fill_n(begin, size, element);
+		}
+		else
+		{
+			do
+			{
+				construct_element(begin++, element);
+			} while (--size != 0);
+		}
+	}
+
+
+
 	// For catch blocks in fill() and range_fill()
 	void recover_from_partial_fill()
 	{
@@ -1300,11 +1282,11 @@ private:
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
 				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
-				plf::uninitialized_fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy), static_cast<allocator_type &>(*this));
+				uninitialized_fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
 			}
 			else
 			{
-				plf::uninitialized_fill_n(pointer_cast<pointer>(end_iterator.element_pointer), size, element, static_cast<allocator_type &>(*this));
+				uninitialized_fill_n(pointer_cast<pointer>(end_iterator.element_pointer), size, element);
 			}
 
 			end_iterator.element_pointer += size;
@@ -1375,11 +1357,11 @@ private:
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
 				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
-				plf::uninitialized_fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy), static_cast<allocator_type &>(*this));
+				uninitialized_fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
 			}
 			else
 			{
-				plf::uninitialized_fill_n(pointer_cast<pointer>(location), size, element, static_cast<allocator_type &>(*this));
+				uninitialized_fill_n(pointer_cast<pointer>(location), size, element);
 			}
 		}
 		else
@@ -1574,17 +1556,19 @@ private:
 			}
 			else
 		#endif
-		do
 		{
-			if constexpr (!std::is_copy_constructible<element_type>::value) // assumes moveable-but-not-copyable type
+			do
 			{
-				construct_element(end_iterator.element_pointer, std::move(*it++));
-			}
-			else
-			{
-				construct_element(end_iterator.element_pointer, *it++);
-			}
-		} while (++end_iterator.element_pointer != fill_end);
+				if constexpr (!std::is_copy_constructible<element_type>::value) // assumes moveable-but-not-copyable type
+				{
+					construct_element(end_iterator.element_pointer, std::move(*it++));
+				}
+				else
+				{
+					construct_element(end_iterator.element_pointer, *it++);
+				}
+			} while (++end_iterator.element_pointer != fill_end);
+		}
 
 		total_size += size;
 	}
@@ -1623,15 +1607,17 @@ private:
 			}
 			else
 		#endif
-		for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 		{
-			if constexpr (!std::is_copy_constructible<element_type>::value) // assumes moveable-but-not-copyable type
+			for (aligned_pointer_type current_location = location; current_location != fill_end; ++current_location)
 			{
-				construct_element(current_location, std::move(*it++));
-			}
-			else
-			{
-				construct_element(current_location, *it++);
+				if constexpr (!std::is_copy_constructible<element_type>::value) // assumes moveable-but-not-copyable type
+				{
+					construct_element(current_location, std::move(*it++));
+				}
+				else
+				{
+					construct_element(current_location, *it++);
+				}
 			}
 		}
 
@@ -1791,7 +1777,7 @@ public:
 
 
 
-	template<plf::compatible_range<element_type> range_type>
+	template<hive_compatible_range<element_type> range_type>
 	void insert_range(range_type &&the_range)
 	{
 		range_insert(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -2547,7 +2533,7 @@ public:
 
 
 
-	template<plf::compatible_range<element_type> range_type>
+	template<hive_compatible_range<element_type> range_type>
 	void assign_range(range_type &&the_range)
 	{
 		range_assign(std::ranges::begin(the_range), static_cast<size_type>(std::ranges::distance(the_range)));
@@ -3442,11 +3428,11 @@ public:
 
 			if constexpr (!std::is_trivially_copy_constructible<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
 			{
-				plf::uninitialized_move(begin_iterator, end_iterator, sort_array, static_cast<allocator_type &>(*this));
+				uninitialized_move(begin_iterator, end_iterator, sort_array);
 			}
 			else
 			{
-				plf::uninitialized_copy(begin_iterator, end_iterator, sort_array, static_cast<allocator_type &>(*this));
+				uninitialized_copy(begin_iterator, end_iterator, sort_array);
 			}
 
 			std::sort(sort_array, end, compare);

@@ -1397,7 +1397,7 @@ int main()
 
 			std::ranges::take_view<std::ranges::ref_view<plf::hive<int>>> rng = i_hive2 | std::ranges::views::take(2);
 
-			hive<int> i_hive_range(plf::ranges::from_range, rng);
+			hive<int> i_hive_range(std::from_range, rng);
 
 			failpass("Rangesv3 constructor test", i_hive_range.size() == 2);
 
