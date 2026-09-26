@@ -945,6 +945,52 @@ private:
 
 
 
+	void update_skipblock(const iterator &new_location, const skipfield_type prev_free_list_index) noexcept
+	{
+		const skipfield_type new_value = static_cast<skipfield_type>(*(new_location.skipfield_pointer) - 1);
+
+		if (new_value != 0) // ie. skipfield was not originally length 1, hence we need to truncate it
+		{
+			// set (new) start and (original) end of skipblock to new value:
+			*(new_location.skipfield_pointer + new_value) = *(new_location.skipfield_pointer + 1) = new_value;
+
+			// transfer free list node to new start node:
+			++(erasure_groups_head->free_list_head);
+
+			if (prev_free_list_index != std::numeric_limits<skipfield_type>::max()) // ie. not the tail free list node
+			{
+				edit_free_list_next(new_location.group_pointer->front() + prev_free_list_index, erasure_groups_head->free_list_head);
+			}
+
+			edit_free_list_head(new_location.element_pointer + 1, prev_free_list_index);
+		}
+		else // single-node skipblock, remove skipblock
+		{
+			erasure_groups_head->free_list_head = prev_free_list_index;
+
+			if (prev_free_list_index != std::numeric_limits<skipfield_type>::max()) // ie. not the last free list node
+			{
+				edit_free_list_next(new_location.group_pointer->front() + prev_free_list_index, std::numeric_limits<skipfield_type>::max());
+			}
+			else // remove this group from the list of groups with erasures
+			{
+				erasure_groups_head = erasure_groups_head->erasures_list_next_group; // update_skipblock is only used within insert/emplace, where the head group is being used, so no need for additional checks here
+			}
+		}
+
+		*(new_location.skipfield_pointer) = 0;
+		++(new_location.group_pointer->size);
+
+		if (new_location.group_pointer == begin_iterator.group_pointer && new_location.element_pointer < begin_iterator.element_pointer)
+		{ /* ie. begin_iterator was moved forwards as the result of an erasure at some point, this erased element is before the current begin, hence, set current begin iterator to this element */
+			begin_iterator = new_location;
+		}
+
+		++total_size;
+	}
+
+
+
 	void update_subsequent_group_numbers(size_type current_group_number, group_pointer_type update_group) noexcept
 	{
 		do
@@ -963,21 +1009,23 @@ private:
 
 
 
-	template<typename pointer_type, class el_type>
-	constexpr void construct_element(const pointer_type location, const el_type &element)
+	void reset_group_numbers_if_necessary() noexcept
 	{
-		std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(location), element);
+		if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max()) [[unlikely]]
+		{
+			reset_group_numbers();
+		}
 	}
 
 
 
-
-	template<typename pointer_type, class el_type>
-	constexpr void construct_element(const pointer_type location, el_type &&element)
+	group_pointer_type reuse_unused_group() noexcept
 	{
-		std::allocator_traits<allocator_type>::construct(*this, pointer_cast<pointer>(location), std::move(element));
+		const group_pointer_type reused_group = unused_groups_head;
+		unused_groups_head = reused_group->next_group;
+		reused_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
+		return reused_group;
 	}
-
 
 
 
@@ -989,26 +1037,7 @@ private:
 
 
 
-	template<int forward_type, typename... arguments>
-	static constexpr bool is_nothrow_capable()
-	{
-		if constexpr (forward_type == 0)
-		{
-			return std::is_nothrow_constructible<element_type, arguments...>::value;
-		}
-		else if constexpr (forward_type == 1)
-		{
-			return std::is_nothrow_copy_constructible<element_type>::value;
-		}
-		else
-		{
-			return std::is_nothrow_move_constructible<element_type>::value;
-		}
-	}
-
-
-
-	template<int forward_type, typename... arguments>
+	template<typename... arguments>
 	iterator emplace_implementation(arguments &&... parameters)
 	{
 		if (end_iterator.element_pointer != nullptr)
@@ -1028,7 +1057,7 @@ private:
 					return return_iterator;
 				}
 
-				if (end_iterator.group_pointer->group_number == std::numeric_limits<size_type>::max()) [[unlikely]] reset_group_numbers(); // Since we're either going to allocate or reuse a reserved group at this point
+				reset_group_numbers_if_necessary();
 				group_pointer_type next_group;
 
 				if (unused_groups_head == nullptr)
@@ -1036,7 +1065,7 @@ private:
 					next_group = allocate_new_group(static_cast<skipfield_type>(std::min(total_size, static_cast<size_type>(max_block_capacity))), end_iterator.group_pointer);
 
 					#ifdef PLF_HIVE_EXCEPTIONS_SUPPORT
-						if constexpr (!is_nothrow_capable<forward_type, arguments...>())
+						if constexpr (!std::is_nothrow_constructible<element_type, arguments...>::value)
 						{
 							try
 							{
@@ -1057,9 +1086,7 @@ private:
 				else
 				{
 					construct_element(unused_groups_head->elements, std::forward<arguments>(parameters) ...);
-					next_group = unused_groups_head;
-					unused_groups_head = next_group->next_group;
-					next_group->reset(1, nullptr, end_iterator.group_pointer, end_iterator.group_pointer->group_number + 1u);
+					next_group = reuse_unused_group();
 				}
 
 				end_iterator.group_pointer->next_group = next_group;
@@ -1074,49 +1101,11 @@ private:
 			{
 				const iterator new_location(erasure_groups_head, erasure_groups_head->front() + erasure_groups_head->free_list_head, erasure_groups_head->skipfield + erasure_groups_head->free_list_head);
 
+				// We always reuse the element at the start of the skipblock, this is also where the free-list information for that skipblock is stored. Get the previous free-list node's index from this memory space, before we write to our element to it. 'Next' index is always the free_list_head in this situation (as represented by the maximum value of the skipfield type) here so we don't need to obtain it:
 				const skipfield_type prev_free_list_index = *pointer_cast<skipfield_pointer_type>(new_location.element_pointer);
 				construct_element(new_location.element_pointer, std::forward<arguments>(parameters) ...);
+				update_skipblock(new_location, prev_free_list_index);
 
-				const skipfield_type new_value = static_cast<skipfield_type>(*(new_location.skipfield_pointer) - 1);
-
-				if (new_value != 0) // ie. skipfield was not originally length 1, hence we need to truncate it
-				{
-					// set (new) start and (original) end of skipblock to new value:
-					*(new_location.skipfield_pointer + new_value) = *(new_location.skipfield_pointer + 1) = new_value;
-
-					// transfer free list node to new start node:
-					++(erasure_groups_head->free_list_head);
-
-					if (prev_free_list_index != std::numeric_limits<skipfield_type>::max()) // ie. not the tail free list node
-					{
-						edit_free_list_next(new_location.group_pointer->front() + prev_free_list_index, erasure_groups_head->free_list_head);
-					}
-
-					edit_free_list_head(new_location.element_pointer + 1, prev_free_list_index);
-				}
-				else // single-node skipblock, remove skipblock
-				{
-					erasure_groups_head->free_list_head = prev_free_list_index;
-
-					if (prev_free_list_index != std::numeric_limits<skipfield_type>::max()) // ie. not the last free list node
-					{
-						edit_free_list_next(new_location.group_pointer->front() + prev_free_list_index, std::numeric_limits<skipfield_type>::max());
-					}
-					else // remove this group from the list of groups with erasures
-					{
-						erasure_groups_head = erasure_groups_head->erasures_list_next_group; // update_skipblock is only used within insert/emplace, where the head group is being used, so no need for additional checks here
-					}
-				}
-
-				*(new_location.skipfield_pointer) = 0;
-				++(new_location.group_pointer->size);
-
-				if (new_location.group_pointer == begin_iterator.group_pointer && new_location.element_pointer < begin_iterator.element_pointer)
-				{ /* ie. begin_iterator was moved forwards as the result of an erasure at some point, this erased element is before the current begin, hence, set current begin iterator to this element */
-					begin_iterator = new_location;
-				}
-
-				++total_size;
 				return new_location;
 			}
 		}
@@ -1125,7 +1114,7 @@ private:
 			initialize(min_block_capacity);
 
 			#ifdef PLF_HIVE_EXCEPTIONS_SUPPORT
-				if constexpr (!is_nothrow_capable<forward_type, arguments...>())
+				if constexpr (!std::is_nothrow_constructible<element_type, arguments...>::value)
 				{
 					try
 					{
@@ -1158,7 +1147,7 @@ public:
 	template<typename... arguments>
 	iterator emplace(arguments &&... parameters)
 	{
-		return emplace_implementation<0>(std::forward<arguments>(parameters) ...);
+		return emplace_implementation(std::forward<arguments>(parameters) ...);
 	}
 
 
@@ -1166,42 +1155,42 @@ public:
 	template<typename... arguments>
 	iterator emplace_hint([[maybe_unused]] const_iterator &hint, arguments &&... parameters) // Note: hint is ignored, it exists purely to serve other standard library functions like insert_iterator
 	{
-		return emplace_implementation<0>(std::forward<arguments>(parameters) ...);
+		return emplace_implementation(std::forward<arguments>(parameters) ...);
 	}
 
 
 
 	iterator insert(const element_type &element)
 	{
-		return emplace_implementation<1>(element);
+		return emplace_implementation(element);
 	}
 
 
 
 	iterator insert([[maybe_unused]] const_iterator &hint, const element_type &element)
 	{
-		return emplace_implementation<1>(element);
+		return emplace_implementation(element);
 	}
 
 
 
 	iterator insert(element_type &&element)
 	{
-		return emplace_implementation<2>(std::move(element));
+		return emplace_implementation(std::move(element));
 	}
 
 
 
 	iterator insert([[maybe_unused]] const_iterator &hint, element_type &&element)
 	{
-		return emplace_implementation<2>(std::move(element));
+		return emplace_implementation(std::move(element));
 	}
 
 
 
 private:
 
-	// Allocator-aware uninitialized_copy/move/fill_n - C++23-and-above-only adaptations of the equivalent functions in plf_tools:
+	// Allocator-aware uninitialized_copy/move/fill_n - C++23-and-above-only adaptations of the equivalent functions in plf_tools, with an assumption of a non-empty copy/fill size:
 
 	// Template to check whether an allocator has a custom construct function, or just relies on allocator_traits (eg. std::allocator since C++20):
 	template<typename alloc_type, typename = std::void_t<>>
