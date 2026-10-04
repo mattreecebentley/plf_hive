@@ -1775,6 +1775,33 @@ int main()
 			}
 
 
+
+			{
+				hive<int> hive1, hive2;
+
+				for(int number = 0; number != 20; ++number)
+				{
+					hive1.insert(number);
+					hive2.insert(number + 20);
+				}
+
+				hive1.splice(std::move(hive2));
+
+				int check_number = 0;
+				bool fail = hive1.size() != 40 || !hive2.empty();
+
+				for (hive<int>::iterator current = hive1.begin(); current != hive1.end(); ++current)
+				{
+					if (check_number++ != *current)
+					{
+						fail = true;
+					}
+				}
+
+				failpass("Rvalue splice test", fail == false);
+			}
+
+
 			{
 				hive<int> hive1, hive2;
 

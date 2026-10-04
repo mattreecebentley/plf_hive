@@ -3332,7 +3332,7 @@ public:
 
 	void splice(hive &&source)
 	{
-		splice(std::move(source));
+		splice(source); // source is an lvalue here, so this calls splice(hive &). std::move(source) would call this function again
 	}
 
 
