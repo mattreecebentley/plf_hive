@@ -173,6 +173,7 @@ int main()
 			hive<int *> p_hive;
 
 			failpass("hive empty", p_hive.empty());
+			failpass("Distance on empty hive", std::distance(p_hive.begin(), p_hive.end()) == 0 && std::distance(p_hive.rbegin(), p_hive.rend()) == 0);
 
 			int ten = 10;
 			p_hive.insert(&ten);
@@ -439,6 +440,29 @@ int main()
 				trim_hive.reserve(4000);
 				trim_hive.trim_capacity(3000);
 				failpass("trim_capacity(n) test", trim_hive.capacity() == 3000);
+			}
+
+			{ // trim_capacity(n) on an empty hive, where the first block is deallocated and an unused block that had erasures becomes the only block
+				hive<int> trim_hive(plf::hive_limits(3, 4));
+
+				for (int counter = 0; counter != 8; ++counter)
+				{
+					trim_hive.insert(counter); // blocks of 3, 3 and 4 elements
+				}
+
+				trim_hive.erase(--trim_hive.end());
+				trim_hive.clear();
+				trim_hive.trim_capacity(4); // deallocates both 3-element blocks
+				trim_hive.insert(1);
+
+				unsigned int count = 0;
+
+				for (hive<int>::iterator current = trim_hive.begin(); current != trim_hive.end(); ++current)
+				{
+					if (++count == 2) break; // There is only one element
+				}
+
+				failpass("trim_capacity(n) after clear test", count == 1 && trim_hive.capacity() == 4);
 			}
 
 			const unsigned int temp_capacity = static_cast<unsigned int>(p_hive.capacity());
@@ -773,6 +797,21 @@ int main()
 
 			failpass("Index-to-iterator test", temp2 == temp_iterator);
 
+			{ // distance() to end() when end() is in a back block that has erasures
+				hive<int> one_slot_left(plf::hive_limits(3, 3));
+				one_slot_left.insert(1);
+				one_slot_left.insert(2);
+				one_slot_left.erase(one_slot_left.begin()); // _ 2 and one unused slot: end() is at the block's last slot
+
+				hive<int> full(plf::hive_limits(3, 3));
+				full.insert(1);
+				full.insert(2);
+				full.insert(3);
+				full.erase(++full.begin()); // 1 _ 3: end() is past the end of the full block
+
+				failpass("Distance to end() in back block test", std::distance(one_slot_left.begin(), one_slot_left.end()) == 1 && std::distance(full.begin(), full.end()) == 2);
+			}
+
 
 			for (hive<int>::iterator the_iterator = i_hive.begin(); the_iterator != i_hive.end();)
 			{
@@ -788,6 +827,30 @@ int main()
 
 			// Test get_iterator etc on a hive with no blocks:
   			failpass("get_iterator test 4", i_hive.get_iterator(&(*temp_iterator)) == i_hive.end());
+
+			{ // Range-erase next to an existing skipblock joins the two; every erased element must still be reported as erased
+				hive<int> skip_hive;
+
+				for (int i = 0; i != 10; ++i)
+				{
+					skip_hive.insert(i);
+				}
+
+				hive<int>::iterator first = skip_hive.begin();
+				std::advance(first, 3);
+				skip_hive.erase(first); // 0 1 2 _ 4 5 6 7 8 9
+
+				first = skip_hive.begin();
+				std::advance(first, 3);
+				hive<int>::iterator last = first;
+				std::advance(last, 3);
+
+				int * const erased_pointer = &(*first); // element 4, the first element of the range
+
+				skip_hive.erase(first, last); // 0 1 2 _ _ _ _ 7 8 9
+
+				failpass("get_iterator range-erase join test", skip_hive.get_iterator(erased_pointer) == skip_hive.end());
+			}
 
 			i_hive.reshape(plf::hive_limits(3, i_hive.block_capacity_limits().max));
 
@@ -1618,6 +1681,18 @@ int main()
 
 			message("Fuzz-test range assign passed.");
 
+			{ // Range assign that ends on an erased slot at the end of a full back block, with a non-trivially-destructible type
+				hive<small_struct_non_trivial> nt_hive(plf::hive_limits(3, 3));
+				nt_hive.insert(1);
+				nt_hive.insert(2);
+				nt_hive.erase(nt_hive.insert(3)); // 1 2 _ : the block is full and ends with an erased slot
+
+				const std::vector<small_struct_non_trivial> nt_vector(3, small_struct_non_trivial(4));
+				nt_hive.assign(nt_vector.begin(), nt_vector.end());
+
+				failpass("Range assign to end of full back block test", nt_hive.size() == 3 && nt_hive.begin()->number == 4);
+			}
+
 
 			i_hive.clear();
 
@@ -1743,6 +1818,32 @@ int main()
 			hive1.reshape(plf::hive_limits(200, 200));
 
 			failpass("Reshape test 4", hive1.capacity() == 3400);
+
+			{ // reshape() on an empty hive, where the first block no longer fits and is deallocated but a later block is kept
+				hive<int> reshaped;
+
+				for (int counter = 0; counter != 1000; ++counter)
+				{
+					reshaped.insert(counter);
+				}
+
+				reshaped.clear();
+				reshaped.reshape(plf::hive_limits(100, 255));
+
+				for (int counter = 0; counter != 300; ++counter)
+				{
+					reshaped.insert(counter);
+				}
+
+				int total = 0;
+
+				for (hive<int>::iterator current = reshaped.begin(); current != reshaped.end(); ++current)
+				{
+					total += *current;
+				}
+
+				failpass("Reshape after clear test", reshaped.size() == 300 && total == 44850);
+			}
 
 		}
 
