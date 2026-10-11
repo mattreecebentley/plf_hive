@@ -1220,14 +1220,6 @@ private:
 
 
 
-	template <class iterator_type2>
-	void uninitialized_move(iterator begin, const iterator end, iterator_type2 destination, allocator_type& alloc)
-	{
-		uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), destination, alloc);
-	}
-
-
-
 	template <typename pointer_type>
 	void uninitialized_fill_n(pointer_type begin, std::size_t size, const element_type& element)
 	{
@@ -3420,7 +3412,7 @@ public:
 
 			if constexpr (!std::is_trivially_copy_constructible<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
 			{
-				uninitialized_move(begin_iterator, end_iterator, sort_array);
+				uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), sort_array);
 			}
 			else
 			{
