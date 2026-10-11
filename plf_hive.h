@@ -2095,16 +2095,21 @@ private:
 
 			edit_free_list_head(start.element_pointer, start.group_pointer->free_list_head);
 			start.group_pointer->free_list_head = start_index;
+
+			if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() will work
+			{
+				std::memset(std::to_address(start.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
+			}
 		}
 		else
 		{
 			// Just update existing skipblock, no need to create new free list node:
 			*(start.skipfield_pointer - previous_node_value) = *(start.skipfield_pointer + distance_to_end - 1) = static_cast<skipfield_type>(previous_node_value + distance_to_end);
-		}
 
-		if (distance_to_end > 2) // if the skipblock is longer than 2 nodes, fill in the middle nodes with non-zero values so that get_iterator() will work
-		{
-			std::memset(std::to_address(start.skipfield_pointer + 1), 1, sizeof(skipfield_type) * (distance_to_end - 2));
+			if (distance_to_end > 1) // the start node is now a middle node of the joined skipblock, so fill it and any following middle nodes with non-zero values so that get_iterator() will work
+			{
+				std::memset(std::to_address(start.skipfield_pointer), 1, sizeof(skipfield_type) * (distance_to_end - 1));
+			}
 		}
 
 		// Update group and hive size:
@@ -2342,7 +2347,7 @@ private:
 	{
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
 		{
-			if (it.element_pointer == it.group_pointer->past_back())
+			if (it.element_pointer == it.group_pointer->past_back() && it.group_pointer->next_group != nullptr) // If this is the back block, it is already end(), so leave it there
 			{
 				it.group_pointer = it.group_pointer->next_group;
 				it.set_to_first_element_in_group();
@@ -2671,9 +2676,10 @@ public:
 				}
 				else
 				{
-					begin_iterator.group_pointer = unused_groups_head;
+					// The previous begin group may have been deallocated above, so point both begin and end at the new group, and reset it, as groups on the unused list are not reset:
+					begin_iterator.group_pointer = end_iterator.group_pointer = unused_groups_head;
 					unused_groups_head = begin_iterator.group_pointer->next_group;
-					begin_iterator.group_pointer->next_group = nullptr;
+					reset_only_group_left(begin_iterator.group_pointer);
 				}
 			}
 		}
@@ -2912,11 +2918,8 @@ public:
 				if (unused_groups_head != nullptr) // some of the reserved blocks were not removed as they were too large, so use one of these to make the new begin group
 				{
 					end_iterator.group_pointer = begin_iterator.group_pointer = unused_groups_head;
-					end_iterator.element_pointer = begin_iterator.element_pointer = unused_groups_head->front();
-					end_iterator.skipfield_pointer = begin_iterator.skipfield_pointer = unused_groups_head->skipfield;
-
 					unused_groups_head = unused_groups_head->next_group;
-					begin_iterator.group_pointer->next_group = nullptr;
+					reset_only_group_left(begin_iterator.group_pointer); // Groups on the unused list are not reset, so reset it here, as reuse_unused_group() does
 				}
 				else
 				{
@@ -4167,6 +4170,11 @@ public:
 			// In the initial and final groups, manual incrementation must be used to calculate distance, if there have been any erasures in those groups.
 			// If there are no prior erasures in either of those groups we can use pointer arithmetic to calculate the distances.
 
+			if (element_pointer == iterator2.element_pointer) [[unlikely]] // Includes begin() == end() on a hive without blocks, where the group pointers are nullptr
+			{
+				return 0;
+			}
+
 			assert(!(group_pointer == nullptr) && !(iterator2.group_pointer == nullptr));  // Check that they are both initialized
 
 			difference_type distance = 0;
@@ -4211,7 +4219,7 @@ public:
 			{
 				distance += iterator2.skipfield_pointer - iterator1.skipfield_pointer;
 			}
- 			else if (iterator1.element_pointer == iterator2.group_pointer->first_element() && iterator2.element_pointer + 1 + *(iterator2.skipfield_pointer + 1) == iterator2.group_pointer->past_back()) // ie. if iterator1 is at beginning of block (have to check this in case first and last are in the same block to begin with) and iterator2 is last element in the block. This check won't work for back block (as end() may not be past end of block), but that's fine, it's just a minor optimization.
+ 			else if (iterator2.group_pointer->next_group != nullptr && iterator1.element_pointer == iterator2.group_pointer->first_element() && iterator2.element_pointer + 1 + *(iterator2.skipfield_pointer + 1) == iterator2.group_pointer->past_back()) // ie. if iterator2 is not in the back block, iterator1 is at beginning of block (have to check this in case first and last are in the same block to begin with) and iterator2 is last element in the block. This check can't be used for the back block, as iterator2 may be end() there, which isn't an element, and if end() is at the end of a full back block, skipfield_pointer + 1 is past the skipfield.
 			{
 				distance += static_cast<difference_type>(iterator2.group_pointer->size) - 1;
 			}
