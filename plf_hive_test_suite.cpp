@@ -7,6 +7,7 @@
 #include <cstdio> // log redirection, printf
 #include <cstdlib> // abort
 #include <utility> // std::move
+#include <memory> // std::unique_ptr
 #include <ranges>
 
 #include "plf_hive.h"
@@ -129,6 +130,21 @@ struct small_struct_non_trivial
 
 	small_struct_non_trivial(const int num) : number(num) {}
 	~small_struct_non_trivial() { ++global_counter; }
+};
+
+
+
+int sort_live_count = 0; // number of sort_counted objects constructed and not yet destroyed
+
+struct sort_counted // small enough for sort() to sort copies of the elements; the copy constructor can throw, so they are copied into the temporary array and moved back
+{
+	int number;
+
+	sort_counted(const int num) : number(num) { ++sort_live_count; }
+	sort_counted(const sort_counted &source) : number(source.number) { ++sort_live_count; }
+	sort_counted & operator = (const sort_counted &source) noexcept { number = source.number; return *this; }
+	~sort_counted() { --sort_live_count; }
+	bool operator < (const sort_counted &source) const { return number < source.number; }
 };
 
 
@@ -1442,6 +1458,50 @@ int main()
 			}
 
 			failpass("Less-than sort with allocation optimization 3 test - large type 2", sorted);
+
+			{
+				hive<sort_counted> sc_hive;
+
+				for (int number = 100; number != 0; --number)
+				{
+					sc_hive.insert(number);
+				}
+
+				sc_hive.sort();
+
+				int sc_previous = 0;
+				sorted = true;
+
+				for (hive<sort_counted>::iterator current = sc_hive.begin(); current != sc_hive.end(); ++current)
+				{
+					sorted = sorted && sc_previous < current->number;
+					sc_previous = current->number;
+				}
+
+				failpass("Sort destroys its temporary copies test", sorted && sort_live_count == static_cast<int>(sc_hive.size()));
+			}
+
+			{
+				hive<std::unique_ptr<int>> up_hive;
+
+				for (int number = 100; number != 0; --number)
+				{
+					up_hive.insert(std::make_unique<int>(number));
+				}
+
+				up_hive.sort([](const std::unique_ptr<int> &first, const std::unique_ptr<int> &second) { return *first < *second; });
+
+				int up_previous = 0;
+				sorted = true;
+
+				for (hive<std::unique_ptr<int>>::iterator current = up_hive.begin(); current != up_hive.end(); ++current)
+				{
+					sorted = sorted && up_previous < **current;
+					up_previous = **current;
+				}
+
+				failpass("Sort of move-only elements test", sorted && up_hive.size() == 100);
+			}
 		}
 
 

@@ -1220,6 +1220,24 @@ private:
 
 
 
+	template <class iterator_type2>
+	void uninitialized_move(iterator begin, const iterator end, iterator_type2 destination)
+	{
+		if constexpr (!allocator_has_construct<allocator_type>::value)
+		{
+			std::uninitialized_move(begin, end, destination);
+		}
+		else
+		{
+			do
+			{
+				construct_element(destination++, std::move(*begin));
+			} while (++begin != end);
+		}
+	}
+
+
+
 	template <typename pointer_type>
 	void uninitialized_fill_n(pointer_type begin, std::size_t size, const element_type& element)
 	{
@@ -3412,7 +3430,7 @@ public:
 
 			if constexpr (!std::is_trivially_copy_constructible<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
 			{
-				uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), sort_array);
+				uninitialized_move(begin_iterator, end_iterator, sort_array);
 			}
 			else
 			{
@@ -3428,13 +3446,13 @@ public:
 			else
 			{
 				std::copy(sort_array, end, begin_iterator);
+			}
 
-				if constexpr (!std::is_trivially_destructible<element_type>::value)
+			if constexpr (!std::is_trivially_destructible<element_type>::value)
+			{
+				for (pointer current = sort_array; current != end; ++current) // Destroy the temporary copies whichever branch above assigned them back
 				{
-					for (pointer current = sort_array; current != end; ++current)
-					{
-						std::allocator_traits<allocator_type>::destroy(*this, current);
-					}
+					std::allocator_traits<allocator_type>::destroy(*this, current);
 				}
 			}
 
