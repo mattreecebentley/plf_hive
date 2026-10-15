@@ -3412,7 +3412,7 @@ public:
 
 			if constexpr (!std::is_trivially_copy_constructible<element_type>::value && std::is_nothrow_move_constructible<element_type>::value)
 			{
-				uninitialized_copy(std::make_move_iterator(begin), std::make_move_iterator(end), sort_array);
+				uninitialized_copy(std::make_move_iterator(begin_iterator), std::make_move_iterator(end_iterator), sort_array);
 			}
 			else
 			{
