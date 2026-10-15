@@ -1472,6 +1472,23 @@ int main()
 
 			failpass("Fill insertion test", i_hive2.size() == 500003);
 
+			{
+				hive<unsigned char> uc_hive(5, 1);
+				uc_hive.insert(5, 2);
+				uc_hive.erase(uc_hive.begin());
+				uc_hive.erase(uc_hive.begin());
+				uc_hive.insert(2, 3);
+
+				int uc_total = 0;
+
+				for (hive<unsigned char>::iterator it = uc_hive.begin(); it != uc_hive.end(); ++it)
+				{
+					uc_total += *it;
+				}
+
+				failpass("Fill insertion for 1-byte types test", uc_hive.size() == 10 && uc_total == 19);
+			}
+
 			std::vector<int> some_ints(500, 2);
 
 			i_hive2.insert(some_ints.begin(), some_ints.end());

@@ -1258,12 +1258,23 @@ private:
 
 	void fill(const element_type &element, const skipfield_type size)
 	{
-		if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
+		if constexpr (std::is_nothrow_copy_constructible<element_type>::value && (sizeof(aligned_element_struct) == sizeof(element_type) || std::is_trivially_copyable<element_type>::value))
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
-				uninitialized_fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
+				if constexpr (!allocator_has_construct<allocator_type>::value)
+				{
+					aligned_element_struct aligned_copy {}; // slot-sized copy of the element, so that the fill does not read past the end of the element
+					std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+					std::uninitialized_fill_n(end_iterator.element_pointer, size, aligned_copy);
+				}
+				else
+				{
+					for (skipfield_type index = 0; index != size; ++index)
+					{
+						construct_element(end_iterator.element_pointer + index, element);
+					}
+				}
 			}
 			else
 			{
@@ -1333,12 +1344,23 @@ private:
 
 	void fill_skipblock(const element_type &element, const aligned_pointer_type location, const skipfield_pointer_type skipfield_pointer, const skipfield_type size)
 	{
-		if constexpr (std::is_nothrow_copy_constructible<element_type>::value)
+		if constexpr (std::is_nothrow_copy_constructible<element_type>::value && (sizeof(aligned_element_struct) == sizeof(element_type) || std::is_trivially_copyable<element_type>::value))
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
-				uninitialized_fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
+				if constexpr (!allocator_has_construct<allocator_type>::value)
+				{
+					aligned_element_struct aligned_copy {};
+					std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+					std::uninitialized_fill_n(location, size, aligned_copy);
+				}
+				else
+				{
+					for (skipfield_type index = 0; index != size; ++index)
+					{
+						construct_element(location + index, element);
+					}
+				}
 			}
 			else
 			{
