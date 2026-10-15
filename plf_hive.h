@@ -3428,13 +3428,13 @@ public:
 			else
 			{
 				std::copy(sort_array, end, begin_iterator);
+			}
 
-				if constexpr (!std::is_trivially_destructible<element_type>::value)
+			if constexpr (!std::is_trivially_destructible<element_type>::value)
+			{
+				for (pointer current = sort_array; current != end; ++current)
 				{
-					for (pointer current = sort_array; current != end; ++current)
-					{
-						std::allocator_traits<allocator_type>::destroy(*this, current);
-					}
+					std::allocator_traits<allocator_type>::destroy(*this, current);
 				}
 			}
 
