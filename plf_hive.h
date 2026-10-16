@@ -1485,7 +1485,7 @@ public:
 		if (group_remainder != 0)
 		{
 			fill(element, group_remainder);
-			end_iterator.group_pointer->size += end_iterator.group_pointer->size;
+			end_iterator.group_pointer->size += group_remainder;
 
 			if (size == group_remainder) // ie. remaining capacity was >= remaining elements to be filled
 			{

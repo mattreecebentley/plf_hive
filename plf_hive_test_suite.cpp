@@ -1472,6 +1472,14 @@ int main()
 
 			failpass("Fill insertion test", i_hive2.size() == 500003);
 
+			{
+				hive<int> i_hive4;
+				i_hive4.insert(1);
+				i_hive4.insert(4, 2);
+
+				failpass("Fill insertion into partly-filled back block test", std::distance(i_hive4.begin(), i_hive4.end()) == 5);
+			}
+
 			std::vector<int> some_ints(500, 2);
 
 			i_hive2.insert(some_ints.begin(), some_ints.end());
