@@ -1220,8 +1220,8 @@ private:
 
 
 
-	template <typename pointer_type>
-	void uninitialized_fill_n(pointer_type begin, std::size_t size, const element_type& element)
+	template <class element_type2, typename pointer_type>
+	void uninitialized_fill_n(pointer_type begin, std::size_t size, const element_type2 &element)
 	{
 		if constexpr (!allocator_has_construct<allocator_type>::value)
 		{
@@ -1262,8 +1262,9 @@ private:
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element; // to avoid potentially violating memory boundaries in line below, create an initial object copy of same (but aligned) type
-				uninitialized_fill_n(end_iterator.element_pointer, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
+				aligned_element_struct aligned_copy;
+				std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+				uninitialized_fill_n(end_iterator.element_pointer, size, aligned_copy);
 			}
 			else
 			{
@@ -1337,8 +1338,9 @@ private:
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type))
 			{
-				alignas (alignof(aligned_element_struct)) element_type aligned_copy = element;
-				uninitialized_fill_n(location, size, *pointer_cast<aligned_pointer_type>(&aligned_copy));
+				aligned_element_struct aligned_copy;
+				std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+				uninitialized_fill_n(location, size, aligned_copy);
 			}
 			else
 			{
