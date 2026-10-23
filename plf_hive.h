@@ -1259,7 +1259,7 @@ private:
 	void fill(const element_type &element, const skipfield_type size)
 	{
 		if constexpr (std::is_nothrow_copy_constructible<element_type>::value &&
-			(((sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)) || sizeof(aligned_element_struct) == sizeof(element_type)))
+			((sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value) || sizeof(aligned_element_struct) == sizeof(element_type)))
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)
 			{
@@ -1336,7 +1336,7 @@ private:
 	void fill_skipblock(const element_type &element, const aligned_pointer_type location, const skipfield_pointer_type skipfield_pointer, const skipfield_type size)
 	{
 		if constexpr (std::is_nothrow_copy_constructible<element_type>::value &&
-			(((sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)) || sizeof(aligned_element_struct) == sizeof(element_type)))
+			((sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value) || sizeof(aligned_element_struct) == sizeof(element_type)))
 		{
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)
 			{
@@ -3023,7 +3023,7 @@ public:
 			if (number_of_max_groups == 0) return;
 
 			// Make the first allocated unused group:
-			const skipfield_type new_block_capacity = static_cast<skipfield_type>((max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder);
+			const skipfield_type new_block_capacity = std::max(static_cast<skipfield_type>(max_block_capacity - negative_remainder), min_block_capacity);
 			negative_remainder -= static_cast<skipfield_type>(max_block_capacity - new_block_capacity);
 			first_unused_group = current_group = allocate_new_group(new_block_capacity, begin_iterator.group_pointer);
 			--number_of_max_groups;
@@ -3051,7 +3051,7 @@ public:
 
 		while (number_of_max_groups != 0)
 		{
-			const skipfield_type new_block_capacity = static_cast<skipfield_type>((max_block_capacity - negative_remainder < min_block_capacity) ? min_block_capacity : max_block_capacity - negative_remainder);
+			const skipfield_type new_block_capacity = std::max(static_cast<skipfield_type>(max_block_capacity - negative_remainder), min_block_capacity);
 			negative_remainder -= static_cast<skipfield_type>(max_block_capacity - new_block_capacity);
 
 			#ifdef PLF_HIVE_EXCEPTIONS_SUPPORT
@@ -4171,7 +4171,7 @@ public:
 				return 0;
 			}
 
-			assert(!(group_pointer == nullptr) && !(iterator2.group_pointer == nullptr));  // Check that they are both initialized
+			if (iterator2 < *this) return -iterator2.distance(*this);
 
 			difference_type distance = 0;
 			hive_iterator iterator1 = *this;
