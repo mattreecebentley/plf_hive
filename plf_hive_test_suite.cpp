@@ -8,6 +8,8 @@
 #include <cstdlib> // abort
 #include <utility> // std::move
 #include <ranges>
+#include <memory> // std::unique_ptr, for_each move-only function testing
+#include <string> // for_each non-trivial type testing
 
 #include "plf_hive.h"
 
@@ -308,6 +310,158 @@ int main()
 				}
 
 				failpass("Positive/negative distance overload fuzz-test", true);
+			}
+
+			for (int pass = 0; pass != 3; ++pass) // for_each and for_each_while must visit the same elements, in the same order, as iteration does. Pass 1 uses word-aligned blocks with erasures in every other block only, pass 2 a sparse hive with long skipblocks
+			{
+				hive<int> f_hive(plf::hive_limits(100 + pass * 28, 100 + pass * 28));
+
+				for (int counter = 0; counter != 2000; ++counter)
+				{
+					f_hive.insert(counter);
+				}
+
+				for (hive<int>::iterator current = f_hive.begin(), end = f_hive.end(); current != end;)
+				{
+					const bool erase = (pass == 2) ? (rand() & 7) != 0 : (rand() & 3) == 0 && (pass == 0 || (*current / 128) % 2 == 1);
+					current = erase ? f_hive.erase(current) : std::next(current);
+				}
+
+				if (pass == 2)
+				{
+					for (int counter = 0; counter != 20 && f_hive.size() > 40; ++counter) // Range erasures, which join skipblocks
+					{
+						hive<int>::iterator first = std::next(f_hive.begin(), rand() % static_cast<int>(f_hive.size() - 20));
+						f_hive.erase(first, std::next(first, 1 + rand() % 8));
+					}
+				}
+
+				std::vector<hive<int>::iterator> positions;
+				std::vector<int *> addresses;
+
+				for (hive<int>::iterator current = f_hive.begin(); current != f_hive.end(); ++current)
+				{
+					positions.push_back(current);
+					addresses.push_back(&*current);
+				}
+
+				positions.push_back(f_hive.end());
+
+				std::vector<int *> visited;
+				plf::for_each(f_hive, [&visited](int &element) { visited.push_back(&element); });
+				failpass("for_each test", visited == addresses);
+
+				struct element_counter
+				{
+					std::size_t count = 0;
+					void operator () (const int &) { ++count; }
+				};
+
+				const hive<int> &const_f_hive = f_hive;
+				failpass("for_each const test", plf::for_each(const_f_hive, element_counter()).count == f_hive.size());
+				failpass("for_each unqualified test", for_each(f_hive.begin(), f_hive.end(), std::function<void(int &)>([](int &) {})) != nullptr);
+
+				hive<int> empty_hive;
+				failpass("for_each empty test", plf::for_each(empty_hive, element_counter()).count == 0 && plf::for_each_while(empty_hive, [](int &) { return true; }).first == empty_hive.end());
+				plf::for_each(const_f_hive, [](auto &element) { static_assert(std::is_const_v<std::remove_reference_t<decltype(element)>>, "a const hive must pass const references"); });
+
+				bool ranges_match = true, while_matches = true;
+
+				for (int counter = 0; counter != 1000; ++counter)
+				{
+					std::size_t first = static_cast<std::size_t>(rand()) % positions.size(), last = static_cast<std::size_t>(rand()) % positions.size();
+					if (first > last) std::swap(first, last);
+
+					visited.clear();
+					plf::for_each(positions[first], positions[last], [&visited](int &element) { visited.push_back(&element); });
+
+					if (visited != std::vector<int *>(addresses.begin() + static_cast<std::ptrdiff_t>(first), addresses.begin() + static_cast<std::ptrdiff_t>(last)))
+					{
+						ranges_match = false;
+					}
+
+					const std::size_t stop = first + static_cast<std::size_t>(rand()) % (last - first + 1); // stop == last means never stop
+					std::size_t current = first;
+					const hive<int>::iterator stopped_at = plf::for_each_while(positions[first], positions[last], [&current, stop](int &) { return current++ != stop; }).first;
+
+					if (stopped_at != positions[stop])
+					{
+						while_matches = false;
+					}
+				}
+
+				failpass("for_each range test", ranges_match);
+				failpass("for_each_while range test", while_matches);
+
+				{ // Whole-hive for_each_while must stop at the element f first returns false for, for both non-const and const hives
+					const std::size_t stop = f_hive.size() / 2;
+					std::size_t current = 0;
+					const bool stopped_correctly = plf::for_each_while(f_hive, [&current, stop](int &) { return current++ != stop; }).first == positions[stop];
+					current = 0;
+					const hive<int>::const_iterator const_stopped_at = plf::for_each_while(const_f_hive, [&current, stop](const int &) { return current++ != stop; }).first;
+					failpass("for_each_while whole hive stop test", stopped_correctly && const_stopped_at == hive<int>::const_iterator(positions[stop]));
+				}
+
+				{ // const_iterator ranges must visit the same elements as iterator ranges
+					bool const_ranges_match = true;
+
+					for (int counter = 0; counter != 100; ++counter)
+					{
+						std::size_t first = static_cast<std::size_t>(rand()) % positions.size(), last = static_cast<std::size_t>(rand()) % positions.size();
+						if (first > last) std::swap(first, last);
+
+						std::vector<const int *> const_visited;
+						plf::for_each(hive<int>::const_iterator(positions[first]), hive<int>::const_iterator(positions[last]), [&const_visited](const int &element) { const_visited.push_back(&element); });
+
+						if (!std::equal(const_visited.begin(), const_visited.end(), addresses.begin() + static_cast<std::ptrdiff_t>(first), addresses.begin() + static_cast<std::ptrdiff_t>(last)))
+						{
+							const_ranges_match = false;
+						}
+					}
+
+					failpass("for_each const_iterator range test", const_ranges_match);
+				}
+
+				{ // Move-only function objects must work, and come back with their state
+					struct move_only_counter
+					{
+						std::unique_ptr<std::size_t> count = std::make_unique<std::size_t>(0);
+						bool operator () (int &) { ++*count; return true; }
+					};
+
+					const std::size_t while_count = *plf::for_each_while(f_hive.begin(), f_hive.end(), move_only_counter()).second.count;
+					const std::size_t whole_count = *plf::for_each(f_hive, move_only_counter()).count;
+					failpass("for_each move-only function test", while_count == f_hive.size() && whole_count == f_hive.size());
+				}
+			}
+
+			for (int pass = 0; pass != 2; ++pass) // Non-trivial element type, which also has a 16-bit skipfield. Pass 1 is sparse
+			{
+				hive<std::string> s_hive;
+
+				for (int counter = 0; counter != 1000; ++counter)
+				{
+					s_hive.insert(std::to_string(counter));
+				}
+
+				int counter = 0;
+
+				for (hive<std::string>::iterator current = s_hive.begin(); current != s_hive.end();)
+				{
+					const bool erase = (pass == 0) ? counter % 3 == 0 : (rand() & 7) != 0;
+					++counter;
+					current = erase ? s_hive.erase(current) : std::next(current);
+				}
+
+				std::string iterated, visited;
+
+				for (const std::string &element : s_hive)
+				{
+					iterated += element;
+				}
+
+				plf::for_each(s_hive, [&visited](std::string &element) { visited += element; });
+				failpass("for_each non-trivial type test", visited == iterated && !visited.empty());
 			}
 
 
