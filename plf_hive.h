@@ -645,8 +645,8 @@ public:
 
 
 
-	// Ranges v3 constructors:
-
+	// Ranges v3 constructors (std::from_range_t is C++23):
+	#ifdef __cpp_lib_ranges_to_container
 	template<hive_compatible_range<element_type> range_type>
 	hive(std::from_range_t, range_type &&rg, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
@@ -669,8 +669,9 @@ public:
 
 	template<hive_compatible_range<element_type> range_type>
 	hive(std::from_range_t, range_type &&rg, const allocator_type &alloc = allocator_type()):
-		hive(std::from_range, std::move(rg), block_capacity_default_limits(), alloc)
+		hive(std::from_range, std::forward<range_type>(rg), block_capacity_default_limits(), alloc)
 	{}
+	#endif
 
 
 
@@ -1190,7 +1191,7 @@ public:
 
 private:
 
-	// Allocator-aware uninitialized_copy/move/fill_n - C++23-and-above-only adaptations of the equivalent functions in plf_tools, with an assumption of a non-empty copy/fill size:
+	// Allocator-aware uninitialized_copy/move/fill_n - C++20-and-above-only adaptations of the equivalent functions in plf_tools, with an assumption of a non-empty copy/fill size:
 
 	// Template to check whether an allocator has a custom construct function, or just relies on allocator_traits (eg. std::allocator since C++20):
 	template<typename alloc_type, typename = std::void_t<>>
