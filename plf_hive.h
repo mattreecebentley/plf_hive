@@ -1553,6 +1553,25 @@ public:
 
 private:
 
+	struct fill_constructor // Used by range_fill() - copies each element visit() passes it to the end of the hive, until the fill ends
+	{
+		hive &destination;
+		const aligned_pointer_type fill_end;
+
+		fill_constructor(hive &store_destination, const aligned_pointer_type store_fill_end) noexcept:
+			destination(store_destination),
+			fill_end(store_fill_end)
+		{}
+
+		bool operator() (const element_type &element) const
+		{
+			destination.construct_element(destination.end_iterator.element_pointer, element);
+			return ++destination.end_iterator.element_pointer != fill_end;
+		}
+	};
+
+
+
 	template <class iterator_type>
 	void range_fill(iterator_type &it, const skipfield_type size)
 	{
@@ -1583,6 +1602,57 @@ private:
 			}
 			else
 		#endif
+		if constexpr ((std::is_same<iterator_type, iterator>::value || std::is_same<iterator_type, const_iterator>::value) && std::is_copy_constructible<element_type>::value) // Copying from a hive, eg. in the copy constructor
+		{
+			iterator_type current = it; // A local copy, which can be kept in registers, as range_fill() may not be inlined
+			do
+			{
+				if (current.group_pointer->no_erasures()) // Copy the run of elements up to the end of current's group, or of the fill, as a plain array
+				{
+					const aligned_pointer_type run_end = (fill_end - end_iterator.element_pointer < current.group_pointer->past_back() - current.element_pointer) ? fill_end : end_iterator.element_pointer + (current.group_pointer->past_back() - current.element_pointer);
+					const_pointer source = pointer_cast<const_pointer>(current.element_pointer);
+					const size_type run_length = static_cast<size_type>(run_end - end_iterator.element_pointer);
+
+					for (; end_iterator.element_pointer != run_end; ++end_iterator.element_pointer, ++source)
+					{
+						construct_element(end_iterator.element_pointer, *source);
+					}
+
+					current.element_pointer += run_length - 1; // Then ++ moves current to the next element, as *current++ would have
+					current.skipfield_pointer += run_length - 1;
+					++current;
+				}
+				else if (static_cast<size_type>(current.group_pointer->size) * 16 >= static_cast<size_type>(current.group_pointer->past_back() - current.group_pointer->front()) * 15) // At most 1 in 16 elements erased: copy to the end of current's group, or of the fill, with visit(), which finds runs of non-erased elements several skipfield nodes at a time
+				{
+					const group_pointer_type source_group = current.group_pointer;
+					const iterator_type group_end(source_group, source_group->past_back(), source_group->skipfield + (source_group->past_back() - source_group->front()));
+					const iterator_type stopped_at = iterator_type::visit(current, group_end, fill_constructor(*this, fill_end)).first;
+
+					if (stopped_at == group_end)
+					{
+						current.group_pointer = source_group->next_group;
+						current.set_to_first_element_in_group();
+					}
+					else // The fill ended at stopped_at, which has been copied
+					{
+						current = stopped_at;
+						++current;
+					}
+				}
+				else // Copy via the skipfield to the end of current's group, or of the fill
+				{
+					const group_pointer_type source_group = current.group_pointer;
+
+					do
+					{
+						construct_element(end_iterator.element_pointer, *current++);
+					} while (++end_iterator.element_pointer != fill_end && current.group_pointer == source_group);
+				}
+			} while (end_iterator.element_pointer != fill_end);
+
+			it = current;
+		}
+		else
 		{
 			do
 			{

@@ -2445,6 +2445,91 @@ int main()
 		}
 
 		{
+			title2("Copying from a hive tests");
+
+			// The copy constructor, and range insert, range construction and assign from hive iterators, must copy the same elements, in the same order, as iterating does.
+			// Patterns: 0 no erasures, 1 erasures in every other block only, 2 one in 32 erased (few erasures per block), 3 one in 4, 4 sparse, 5 erasures in runs of 50
+			bool copies_match = true, inserts_match = true, range_constructions_match = true, assigns_match = true;
+
+			for (int pattern = 0; pattern != 6; ++pattern)
+			{
+				for (int limits = 0; limits != 2; ++limits)
+				{
+					hive<int> source = (limits == 0) ? hive<int>() : hive<int>(plf::hive_limits(50, 70));
+
+					for (int counter = 0; counter != 3000; ++counter)
+					{
+						source.insert(counter);
+					}
+
+					int index = 0;
+					bool erase_run = false;
+
+					for (hive<int>::iterator current = source.begin(); current != source.end(); ++index)
+					{
+						bool erase = false;
+
+						switch (pattern)
+						{
+							case 1: erase = (index / 128) % 2 == 1 && (rand() & 3) == 0; break;
+							case 2: erase = (rand() & 31) == 0; break;
+							case 3: erase = (rand() & 3) == 0; break;
+							case 4: erase = (rand() & 7) != 0; break;
+							case 5: if (index % 50 == 0) erase_run = (rand() & 3) == 0; erase = erase_run; break;
+							default: break;
+						}
+
+						current = erase ? source.erase(current) : std::next(current);
+					}
+
+					const std::vector<int> expected(source.begin(), source.end());
+
+					const hive<int> copy(source);
+					copies_match = copies_match && copy.size() == expected.size() && std::equal(copy.begin(), copy.end(), expected.begin());
+
+					for (int counter = 0; counter != 20; ++counter)
+					{
+						const int size = static_cast<int>(expected.size());
+						const int first = rand() % (size + 1), last = first + rand() % (size - first + 1);
+						const hive<int>::const_iterator first_it = std::next(source.cbegin(), first), last_it = std::next(source.cbegin(), last);
+
+						hive<int> destination(plf::hive_limits(10 + rand() % 200, 255)); // Destination blocks of other sizes, so that fills start and end part way through source blocks
+
+						for (int counter2 = rand() % 100; counter2 != 0; --counter2)
+						{
+							destination.insert(-1);
+						}
+
+						for (hive<int>::iterator current = destination.begin(); current != destination.end();) // Erasures, so that some of the insert fills erased slots
+						{
+							current = ((rand() & 3) == 0) ? destination.erase(current) : std::next(current);
+						}
+
+						std::vector<int> inserted(destination.begin(), destination.end());
+						destination.insert(first_it, last_it);
+						std::vector<int> after(destination.begin(), destination.end());
+						std::vector<int> expected_after(inserted);
+						expected_after.insert(expected_after.end(), expected.begin() + first, expected.begin() + last);
+						std::sort(after.begin(), after.end());
+						std::sort(expected_after.begin(), expected_after.end());
+						inserts_match = inserts_match && after == expected_after;
+
+						const hive<int> range_constructed(first_it, last_it);
+						range_constructions_match = range_constructions_match && std::equal(range_constructed.begin(), range_constructed.end(), expected.begin() + first, expected.begin() + last) && range_constructed.size() == static_cast<std::size_t>(last - first);
+
+						destination.assign(first_it, last_it);
+						assigns_match = assigns_match && std::equal(destination.begin(), destination.end(), expected.begin() + first, expected.begin() + last) && destination.size() == static_cast<std::size_t>(last - first);
+					}
+				}
+			}
+
+			failpass("Copy constructor from hive test", copies_match);
+			failpass("Range insert from hive iterators test", inserts_match);
+			failpass("Range construction from hive iterators test", range_constructions_match);
+			failpass("Assign from hive iterators test", assigns_match);
+		}
+
+		{
 			title2("range/fill-insertion when skipblocks are present testing");
 
 			hive<int> i_hive(100, 1);
