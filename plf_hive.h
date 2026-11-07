@@ -40,6 +40,7 @@
 #include <concepts>
 #include <compare> // std::strong_ordering
 #include <ranges>
+#include <bit> // std::countr_zero, std::countl_zero, std::endian
 
 
 #define PLF_HIVE_EXCEPTIONS_SUPPORT
@@ -60,6 +61,46 @@ namespace plf
 	// For matching ranges which return input_iterator's and match the container's element type:
 	template <typename range_type, class element_type>
 	concept hive_compatible_range = std::ranges::input_range<range_type> && std::convertible_to<std::ranges::range_reference_t<range_type>, element_type>;
+
+	// For matching hive's (non-reverse) iterators only:
+	template <class T>
+	concept hive_forward_iterator_concept = hive_iterator_concept<T> && requires { typename T::reverse_type; };
+
+
+
+	// Applies f to the elements in [first, last), in order, until f returns false. Equivalent to: while (first != last && f(*first)) ++first; return {first, f};
+	// Faster than iterating, as runs of non-erased elements are found several skipfield nodes at a time. f must not insert into or erase from the hive.
+	template <hive_forward_iterator_concept it_type, class function_type>
+	std::pair<it_type, function_type> for_each_while(it_type first, const it_type last, function_type f)
+	{
+		return it_type::visit(first, last, std::move(f));
+	}
+
+
+
+	// Applies f to every element in [first, last), in order. Equivalent to: while (first != last) f(*first++); return f;
+	template <hive_forward_iterator_concept it_type, class function_type>
+	function_type for_each(it_type first, const it_type last, function_type f)
+	{
+		plf::for_each_while(first, last, [&f](auto &element) { f(element); return true; });
+		return f;
+	}
+
+
+
+	template <class hive_type, class function_type> requires hive_forward_iterator_concept<typename hive_type::iterator>
+	auto for_each_while(hive_type &container, function_type f)
+	{
+		return plf::for_each_while(container.begin(), container.end(), std::move(f));
+	}
+
+
+
+	template <class hive_type, class function_type> requires hive_forward_iterator_concept<typename hive_type::iterator>
+	function_type for_each(hive_type &container, function_type f)
+	{
+		return plf::for_each(container.begin(), container.end(), std::move(f));
+	}
 }
 
 
@@ -3673,6 +3714,9 @@ public:
 		template <plf::hive_iterator_concept it_type>
 		friend typename std::iterator_traits<it_type>::difference_type std::distance(const it_type first, const it_type last);
 
+		template <plf::hive_forward_iterator_concept it_type, class function_type>
+		friend std::pair<it_type, function_type> plf::for_each_while(it_type first, const it_type last, function_type f);
+
 
 		hive_iterator() noexcept = default;
 
@@ -3898,6 +3942,89 @@ public:
 			element_pointer(element_p),
 			skipfield_pointer(skipfield_p)
 		{}
+
+
+
+		// Used by plf::for_each_while. Groups without erasures are visited as plain arrays. In groups with at most 1/4 of their elements erased, 8 bytes of
+		// skipfield are loaded at a time and their zero (non-erased) nodes found with bit operations, so there is no branch per erased element. As erased nodes
+		// are always non-zero, a word with no erased nodes is visited as a plain array. The node after the last non-erased node in a word is either non-erased
+		// or the start node of a skipblock, which holds the skipblock's length, so adding that node's value skips the whole skipblock. Groups with more
+		// erasures are visited via the skipfield as operator ++ does, as there the branches per word would mispredict too often.
+		template <class function_type>
+		static std::pair<hive_iterator, function_type> visit(const hive_iterator first, const hive_iterator last, function_type f)
+		{
+			if (first == last) return {last, std::move(f)}; // Also covers an empty hive, which has no groups
+
+			constexpr bool scan_words = std::endian::native == std::endian::little; // Node order within a loaded word is only known for little-endian
+			constexpr std::size_t node_bits = sizeof(skipfield_type) * 8, nodes_per_word = sizeof(std::uint64_t) / sizeof(skipfield_type);
+			constexpr std::uint64_t low_bits = (~std::uint64_t(0) / std::numeric_limits<skipfield_type>::max()) * (std::numeric_limits<skipfield_type>::max() >> 1); // 0x7F7F... or 0x7FFF...
+			constexpr std::uint64_t top_bits = ~low_bits; // The top bit of every node
+
+			for (group_pointer_type current_group = first.group_pointer;; current_group = current_group->next_group)
+			{
+				assert(current_group != nullptr); // ie. last is not reachable from first
+
+				const pointer elements = pointer_cast<pointer>(current_group->front()); // const-qualified for const_iterator, so a const hive's elements cannot be modified through f
+				const skipfield_type * const skipfield = std::to_address(current_group->skipfield);
+				const std::size_t end_index = static_cast<std::size_t>(((current_group == last.group_pointer) ? last.element_pointer : current_group->past_back()) - current_group->front());
+				std::size_t index = (current_group == first.group_pointer) ? static_cast<std::size_t>(first.element_pointer - current_group->front()) : *skipfield; // skipfield[0] is 0 or the length of a leading skipblock
+
+				if (current_group->no_erasures()) // Visit the group as a plain array
+				{
+					while (index != end_index && f(elements[index])) ++index;
+				}
+				else
+				{
+					const bool few_erasures = static_cast<std::size_t>(current_group->size) * 4 >= static_cast<std::size_t>(current_group->past_back() - current_group->front()) * 3;
+
+					while (scan_words && few_erasures && index + nodes_per_word <= end_index) // index is always a non-erased element here
+					{
+						std::uint64_t word;
+						std::memcpy(&word, skipfield + index, sizeof(word));
+						const std::uint64_t non_erased = ~(((word & low_bits) + low_bits) | word) & top_bits; // The top bit of each zero node
+
+						if (non_erased == top_bits) // No erased nodes in this word
+						{
+							for (const std::size_t word_end = index + nodes_per_word; index != word_end; ++index)
+							{
+								if (!f(elements[index])) goto stopped;
+							}
+						}
+						else
+						{
+							for (std::uint64_t remaining = non_erased; remaining != 0; remaining &= remaining - 1) // Visit each non-erased node, lowest first
+							{
+								const std::size_t element_index = index + static_cast<std::size_t>(std::countr_zero(remaining)) / node_bits;
+
+								if (!f(elements[element_index]))
+								{
+									index = element_index;
+									goto stopped;
+								}
+							}
+
+							index += static_cast<std::size_t>(64 - std::countl_zero(non_erased)) / node_bits; // One past the last non-erased node
+						}
+
+						index += skipfield[index]; // Skip the skipblock which starts there, if any
+					}
+
+					while (index < end_index && f(elements[index])) // The remaining nodes, via the skipfield, as operator ++ does
+					{
+						++index;
+						index += skipfield[index];
+					}
+				}
+
+				if (index < end_index)
+				{
+					stopped:
+					return {hive_iterator(current_group, current_group->front() + index, current_group->skipfield + index), std::move(f)};
+				}
+
+				if (current_group == last.group_pointer) return {last, std::move(f)};
+			}
+		}
 
 
 
