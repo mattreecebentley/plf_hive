@@ -361,6 +361,16 @@ int main()
 				failpass("for_each const test", plf::for_each(const_f_hive, element_counter()).count == f_hive.size());
 				failpass("for_each unqualified test", for_each(f_hive.begin(), f_hive.end(), std::function<void(int &)>([](int &) {})) != nullptr);
 
+				{ // std::for_each on hive iterators must visit the same elements as iteration does, and still work on other iterators:
+					std::vector<int *> std_visited;
+					std::for_each(f_hive.begin(), f_hive.end(), [&std_visited](int &element) { std_visited.push_back(&element); });
+					const int array[3] = {1, 2, 3};
+					failpass("std::for_each test", std_visited == addresses && std::for_each(std::begin(array), std::end(array), element_counter()).count == 3 && std::for_each(const_f_hive.cbegin(), const_f_hive.cend(), element_counter()).count == f_hive.size());
+
+					using namespace std;
+					failpass("std::for_each unqualified test", for_each(f_hive.begin(), f_hive.end(), element_counter()).count == f_hive.size());
+				}
+
 				hive<int> empty_hive;
 				failpass("for_each empty test", plf::for_each(empty_hive, element_counter()).count == 0 && plf::for_each_while(empty_hive, [](int &) { return true; }).first == empty_hive.end());
 				plf::for_each(const_f_hive, [](auto &element) { static_assert(std::is_const_v<std::remove_reference_t<decltype(element)>>, "a const hive must pass const references"); });
@@ -373,7 +383,7 @@ int main()
 					if (first > last) std::swap(first, last);
 
 					visited.clear();
-					plf::for_each(positions[first], positions[last], [&visited](int &element) { visited.push_back(&element); });
+					std::for_each(positions[first], positions[last], [&visited](int &element) { visited.push_back(&element); });
 
 					if (visited != std::vector<int *>(addresses.begin() + static_cast<std::ptrdiff_t>(first), addresses.begin() + static_cast<std::ptrdiff_t>(last)))
 					{
@@ -411,7 +421,7 @@ int main()
 						if (first > last) std::swap(first, last);
 
 						std::vector<const int *> const_visited;
-						plf::for_each(hive<int>::const_iterator(positions[first]), hive<int>::const_iterator(positions[last]), [&const_visited](const int &element) { const_visited.push_back(&element); });
+						std::for_each(hive<int>::const_iterator(positions[first]), hive<int>::const_iterator(positions[last]), [&const_visited](const int &element) { const_visited.push_back(&element); });
 
 						if (!std::equal(const_visited.begin(), const_visited.end(), addresses.begin() + static_cast<std::ptrdiff_t>(first), addresses.begin() + static_cast<std::ptrdiff_t>(last)))
 						{
