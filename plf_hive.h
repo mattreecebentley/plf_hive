@@ -876,22 +876,54 @@ private:
 	{
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
 		{
-			while (it != end_iterator) destroy_element(it++.element_pointer);
+			if (it == end_iterator) return;
+
+			// The rest of it's group is destroyed via the skipfield, as range_assign() marks a group as having no erasures before calling this for the rest of that group:
+			destroy_via_skipfield(it, (it.group_pointer == end_iterator.group_pointer) ? end_iterator.element_pointer : it.group_pointer->past_back());
+
+			while (it.group_pointer != end_iterator.group_pointer) // The remaining groups are destroyed a group at a time, so that groups without erasures are destroyed as plain arrays
+			{
+				it.group_pointer = it.group_pointer->next_group;
+				it.set_to_first_element_in_group();
+				destroy_group(it, (it.group_pointer == end_iterator.group_pointer) ? end_iterator.element_pointer : it.group_pointer->past_back());
+			}
 		}
 	}
 
 
 
-	void destroy_group(const_iterator current, const aligned_pointer_type end) noexcept
+	// Destroys the non-erased elements in [current, end) of current's group, via the skipfield:
+	void destroy_via_skipfield(const_iterator current, const aligned_pointer_type end) noexcept
 	{
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
 		{
-			do
+			while (current.element_pointer != end)
 			{
 				destroy_element(current.element_pointer);
 				current.element_pointer += static_cast<size_type>(*++current.skipfield_pointer) + 1u;
 				current.skipfield_pointer += *current.skipfield_pointer;
-			} while(current.element_pointer != end);
+			}
+		}
+	}
+
+
+
+	// Destroys the non-erased elements in [current, end) of current's group. A group without erasures is destroyed as a plain array:
+	void destroy_group(const_iterator current, const aligned_pointer_type end) noexcept
+	{
+		if constexpr (!std::is_trivially_destructible<element_type>::value)
+		{
+			if (current.group_pointer->no_erasures())
+			{
+				for (aligned_pointer_type element = current.element_pointer; element != end; ++element)
+				{
+					destroy_element(element);
+				}
+			}
+			else
+			{
+				destroy_via_skipfield(current, end);
+			}
 		}
 	}
 

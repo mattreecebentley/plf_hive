@@ -2445,6 +2445,87 @@ int main()
 		}
 
 		{
+			title2("Element destruction tests");
+
+			// clear(), range erase, assign() to fewer elements and the destructor must destroy each element exactly once, in blocks with and without erasures. Pass 0 has no erasures, pass 1 erasures in every other block only, pass 2 is sparse
+			struct live_counter
+			{
+				int *live;
+
+				explicit live_counter(int *store_live) noexcept: live(store_live) { ++*live; }
+				live_counter(const live_counter &source) noexcept: live(source.live) { ++*live; }
+				live_counter & operator = (const live_counter &source) noexcept { --*live; live = source.live; ++*live; return *this; }
+				~live_counter() noexcept { --*live; }
+			};
+
+			int live = 0;
+			bool clear_destroys = true, range_erase_destroys = true, assign_destroys = true, destructor_destroys = true;
+
+			for (int pass = 0; pass != 3; ++pass)
+			{
+				for (int operation = 0; operation != 4; ++operation)
+				{
+					{
+						hive<live_counter> d_hive(plf::hive_limits(64, 64));
+
+						for (int counter = 0; counter != 2000; ++counter)
+						{
+							d_hive.insert(live_counter(&live));
+						}
+
+						int index = 0;
+
+						for (hive<live_counter>::iterator current = d_hive.begin(); current != d_hive.end(); ++index)
+						{
+							const bool erase = (pass == 2) ? (rand() & 7) != 0 : (pass == 1 && (index / 64) % 2 == 1 && (rand() & 3) == 0);
+							current = erase ? d_hive.erase(current) : std::next(current);
+						}
+
+						switch (operation)
+						{
+							case 0:
+								d_hive.clear();
+								clear_destroys = clear_destroys && live == 0;
+								break;
+							case 1:
+								for (int counter = 0; counter != 10 && d_hive.size() > 2; ++counter)
+								{
+									const int size = static_cast<int>(d_hive.size());
+									const int first = rand() % size, last = first + rand() % (size - first + 1);
+									d_hive.erase(std::next(d_hive.begin(), first), std::next(d_hive.begin(), last));
+									range_erase_destroys = range_erase_destroys && live == static_cast<int>(d_hive.size());
+								}
+								d_hive.erase(std::next(d_hive.begin(), static_cast<int>(d_hive.size() / 2)), d_hive.end()); // Up to end()
+								range_erase_destroys = range_erase_destroys && live == static_cast<int>(d_hive.size());
+								break;
+							case 2:
+							{
+								const std::vector<live_counter> fewer(d_hive.size() / 3, live_counter(&live));
+								d_hive.assign(fewer.begin(), fewer.end());
+								assign_destroys = assign_destroys && live == static_cast<int>(d_hive.size() + fewer.size());
+								break;
+							}
+							default:
+								break;
+						}
+					}
+
+					if (operation == 3)
+					{
+						destructor_destroys = destructor_destroys && live == 0;
+					}
+
+					live = 0;
+				}
+			}
+
+			failpass("clear destruction test", clear_destroys);
+			failpass("range erase destruction test", range_erase_destroys);
+			failpass("assign destruction test", assign_destroys);
+			failpass("destructor destruction test", destructor_destroys);
+		}
+
+		{
 			title2("range/fill-insertion when skipblocks are present testing");
 
 			hive<int> i_hive(100, 1);
