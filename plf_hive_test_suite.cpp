@@ -2442,6 +2442,68 @@ int main()
 
 			failpass("erase_if test",	static_cast<int>(i_hive.size()) == 500);
 
+
+			// erase_if must erase the same elements as a filtered copy does, and call the predicate once per element. Patterns: single matches with short and long gaps, runs of matches, no matches, all matching, with and without prior erasures
+			struct counting_predicate
+			{
+				std::size_t *calls;
+				int modulus, matches_below;
+
+				bool operator() (const int &value) const
+				{
+					++*calls;
+					return value % modulus < matches_below;
+				}
+			};
+
+			const int patterns[][2] = {{2, 1}, {10, 1}, {100, 1}, {1000, 3}, {100, 40}, {5000, 1}, {7, 0}, {3, 3}};
+			bool erase_if_matches = true, predicate_called_once = true;
+
+			for (int prior_erasure = 0; prior_erasure != 2; ++prior_erasure)
+			{
+				for (const int (&pattern)[2] : patterns)
+				{
+					hive<int> e_hive;
+
+					for (int counter = 0; counter != 3000; ++counter)
+					{
+						e_hive.insert((rand() & 1) ? counter : rand());
+					}
+
+					if (prior_erasure == 1)
+					{
+						for (hive<int>::iterator current = e_hive.begin(); current != e_hive.end();)
+						{
+							current = ((rand() & 3) == 0) ? e_hive.erase(current) : std::next(current);
+						}
+					}
+
+					std::vector<int> expected;
+
+					for (hive<int>::iterator current = e_hive.begin(); current != e_hive.end(); ++current)
+					{
+						if (*current % pattern[0] >= pattern[1]) expected.push_back(*current);
+					}
+
+					const std::size_t original_size = e_hive.size();
+					std::size_t calls = 0;
+					const counting_predicate predicate = {&calls, pattern[0], pattern[1]};
+					const std::size_t erased = erase_if(e_hive, predicate);
+
+					if (erased != original_size - expected.size() || e_hive.size() != expected.size() || !std::equal(e_hive.begin(), e_hive.end(), expected.begin()))
+					{
+						erase_if_matches = false;
+					}
+
+					if (calls != original_size)
+					{
+						predicate_called_once = false;
+					}
+				}
+			}
+
+			failpass("erase_if pattern test", erase_if_matches);
+			failpass("erase_if predicate call count test", predicate_called_once);
 		}
 
 		{
