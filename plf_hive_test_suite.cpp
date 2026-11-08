@@ -2673,6 +2673,79 @@ int main()
 		}
 
 		{
+			title2("Sort with erasures tests");
+
+			// sort() must give the same order as sorting a copy, with erasures present, for the copy-to-an-array path (int, and a type whose copy can throw) and the pointer-tuple path (std::string)
+			struct throwing_copy // Small, but its copy may throw, so sort() copies it with uninitialized_copy
+			{
+				int value;
+
+				explicit throwing_copy(const int store_value) noexcept: value(store_value) {}
+				throwing_copy(const throwing_copy &source) noexcept(false): value(source.value) {}
+				throwing_copy & operator = (const throwing_copy &source) noexcept(false) { value = source.value; return *this; }
+				bool operator < (const throwing_copy &other) const noexcept { return value < other.value; }
+				bool operator == (const throwing_copy &other) const noexcept { return value == other.value; }
+			};
+
+			bool int_sorts = true, throwing_sorts = true, string_sorts = true;
+
+			for (int pattern = 0; pattern != 4; ++pattern)
+			{
+				hive<int> i_hive(plf::hive_limits(50, 100));
+				hive<throwing_copy> t_hive;
+				hive<std::string> s_hive;
+
+				for (int counter = 0; counter != 2000; ++counter)
+				{
+					const int value = rand() % 1000;
+					i_hive.insert(value);
+					t_hive.insert(throwing_copy(value));
+					s_hive.insert(std::to_string(value));
+				}
+
+				hive<throwing_copy>::iterator t_current = t_hive.begin();
+				hive<std::string>::iterator s_current = s_hive.begin();
+
+				for (hive<int>::iterator current = i_hive.begin(); current != i_hive.end();) // Pattern 0 no erasures, 1 one in 64, 2 one in 4, 3 sparse
+				{
+					const bool erase = (pattern == 1) ? (rand() & 63) == 0 : (pattern == 2) ? (rand() & 3) == 0 : (pattern == 3) ? (rand() & 7) != 0 : false;
+
+					if (erase)
+					{
+						current = i_hive.erase(current);
+						t_current = t_hive.erase(t_current);
+						s_current = s_hive.erase(s_current);
+					}
+					else
+					{
+						++current;
+						++t_current;
+						++s_current;
+					}
+				}
+
+				std::vector<int> i_expected(i_hive.begin(), i_hive.end());
+				std::vector<throwing_copy> t_expected(t_hive.begin(), t_hive.end());
+				std::vector<std::string> s_expected(s_hive.begin(), s_hive.end());
+				std::sort(i_expected.begin(), i_expected.end());
+				std::sort(t_expected.begin(), t_expected.end());
+				std::sort(s_expected.begin(), s_expected.end());
+
+				i_hive.sort();
+				t_hive.sort();
+				s_hive.sort();
+
+				int_sorts = int_sorts && i_hive.size() == i_expected.size() && std::equal(i_hive.begin(), i_hive.end(), i_expected.begin());
+				throwing_sorts = throwing_sorts && t_hive.size() == t_expected.size() && std::equal(t_hive.begin(), t_hive.end(), t_expected.begin());
+				string_sorts = string_sorts && s_hive.size() == s_expected.size() && std::equal(s_hive.begin(), s_hive.end(), s_expected.begin());
+			}
+
+			failpass("Sort with erasures test", int_sorts);
+			failpass("Sort with erasures, throwing copy test", throwing_sorts);
+			failpass("Sort with erasures, pointer sort test", string_sorts);
+		}
+
+		{
 			title2("range/fill-insertion when skipblocks are present testing");
 
 			hive<int> i_hive(100, 1);
