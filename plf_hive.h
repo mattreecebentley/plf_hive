@@ -899,12 +899,12 @@ private:
 	{
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
 		{
-			while (current.element_pointer != end)
+			do
 			{
 				destroy_element(current.element_pointer);
 				current.element_pointer += static_cast<size_type>(*++current.skipfield_pointer) + 1u;
 				current.skipfield_pointer += *current.skipfield_pointer;
-			}
+			} while (current.element_pointer != end);
 		}
 	}
 
@@ -917,10 +917,12 @@ private:
 		{
 			if (current.group_pointer->no_erasures())
 			{
-				for (aligned_pointer_type element = current.element_pointer; element != end; ++element)
+				aligned_pointer_type element = current.element_pointer;
+
+				do
 				{
 					destroy_element(element);
-				}
+				} while (++element != end);
 			}
 			else
 			{
