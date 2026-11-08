@@ -78,29 +78,12 @@ namespace plf
 
 
 
-	// Applies f to every element in [first, last), in order. Equivalent to: while (first != last) f(*first++); return f;
-	template <hive_forward_iterator_concept it_type, class function_type>
-	function_type for_each(it_type first, const it_type last, function_type f)
-	{
-		plf::for_each_while(first, last, [&f](auto &element) { f(element); return true; });
-		return f;
-	}
-
-
-
 	template <class hive_type, class function_type> requires hive_forward_iterator_concept<typename hive_type::iterator>
 	auto for_each_while(hive_type &container, function_type f)
 	{
 		return plf::for_each_while(container.begin(), container.end(), std::move(f));
 	}
 
-
-
-	template <class hive_type, class function_type> requires hive_forward_iterator_concept<typename hive_type::iterator>
-	function_type for_each(hive_type &container, function_type f)
-	{
-		return plf::for_each(container.begin(), container.end(), std::move(f));
-	}
 }
 
 
@@ -147,12 +130,31 @@ namespace std
 		return first.base().distance(last.base());
 	}
 
+
+
+	// Applies f to every element in [first, last), in order, using plf::for_each_while. Equivalent to: while (first != last) f(*first++); return f;
+	template <plf::hive_forward_iterator_concept it_type, class function_type>
+	function_type for_each(it_type first, const it_type last, function_type f)
+	{
+		plf::for_each_while(first, last, [&f](auto &element) { f(element); return true; });
+		return f;
+	}
+
 }
 
 
 
 namespace plf
 {
+
+
+// Applies f to every element of a hive, in order:
+template <class hive_type, class function_type> requires hive_forward_iterator_concept<typename hive_type::iterator>
+function_type for_each(hive_type &container, function_type f)
+{
+	return std::for_each(container.begin(), container.end(), std::move(f));
+}
+
 
 
 struct hive_limits // for use in block_capacity setting/getting functions and constructors
