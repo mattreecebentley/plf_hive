@@ -4851,7 +4851,7 @@ namespace std
 				if (++non_matches != 32) continue;
 
 				// Long gap between matches: find the next match with plf::for_each_while, which skips non-matching elements faster than iterating. Short gaps are stepped over, as a call costs more than a few increments. The predicate has already been called for current, so the search starts after it:
-				current = plf::for_each_while(std::next(current), end, plf::hive_not_predicate<element_type, predicate_function>(predicate)).first;
+				current = plf::for_each_while(++current, end, plf::hive_not_predicate<element_type, predicate_function>(predicate)).first;
 				if (current == end) break;
 			}
 
