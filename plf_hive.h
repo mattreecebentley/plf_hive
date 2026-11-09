@@ -1323,6 +1323,17 @@ private:
 			if constexpr ((!std::is_copy_constructible<element_type>::value && !std::is_nothrow_move_constructible<element_type>::value) || !std::is_nothrow_copy_constructible<element_type>::value) // to avoid unnecessary codegen, since this function will never be called if this line isn't true
 			{
 				const skipfield_type elements_constructed_before_exception = static_cast<skipfield_type>(end_iterator.element_pointer - end_iterator.group_pointer->front());
+
+				if (elements_constructed_before_exception == 0 && end_iterator.group_pointer != begin_iterator.group_pointer) // Exception at the front of a group other than the first: do not leave an empty group at the back, as destroy_group() and destroy_via_skipfield() require a non-empty range. Return the group to the unused groups instead, and make the previous (full) group the back group:
+				{
+					unused_groups_head = end_iterator.group_pointer; // Its next_group still links to the rest of the unused groups
+					end_iterator.group_pointer = end_iterator.group_pointer->previous_group;
+					end_iterator.element_pointer = end_iterator.group_pointer->past_back();
+					end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + end_iterator.group_pointer->capacity;
+					end_iterator.group_pointer->next_group = nullptr;
+					return;
+				}
+
 				end_iterator.group_pointer->size = elements_constructed_before_exception;
 				end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + elements_constructed_before_exception;
 				total_size += elements_constructed_before_exception;
@@ -1471,12 +1482,13 @@ private:
 			fill(element, capacity);
 		}
 
-		// Deal with final group (partial fill)
-		unused_groups_head = end_iterator.group_pointer->next_group;
-		end_iterator.group_pointer->reset(static_cast<skipfield_type>(size), nullptr, previous_group, group_number);
+		// Deal with final group (partial fill). It stays linked to the rest of the unused groups until the fill is done, so that recover_from_partial_fill() does not lose them if an exception is thrown:
+		end_iterator.group_pointer->reset(static_cast<skipfield_type>(size), end_iterator.group_pointer->next_group, previous_group, group_number);
 		end_iterator.element_pointer = end_iterator.group_pointer->front();
 		end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + size;
 		fill(element, static_cast<skipfield_type>(size));
+		unused_groups_head = end_iterator.group_pointer->next_group;
+		end_iterator.group_pointer->next_group = nullptr;
 	}
 
 
@@ -1774,12 +1786,13 @@ private:
 			range_fill(it, capacity);
 		}
 
-		// Deal with final group (partial fill)
-		unused_groups_head = end_iterator.group_pointer->next_group;
-		end_iterator.group_pointer->reset(static_cast<skipfield_type>(size), nullptr, previous_group, group_number);
+		// Deal with final group (partial fill). It stays linked to the rest of the unused groups until the fill is done, so that recover_from_partial_fill() does not lose them if an exception is thrown:
+		end_iterator.group_pointer->reset(static_cast<skipfield_type>(size), end_iterator.group_pointer->next_group, previous_group, group_number);
 		end_iterator.element_pointer = end_iterator.group_pointer->front();
 		end_iterator.skipfield_pointer = end_iterator.group_pointer->skipfield + size;
 		range_fill(it, static_cast<skipfield_type>(size));
+		unused_groups_head = end_iterator.group_pointer->next_group;
+		end_iterator.group_pointer->next_group = nullptr;
 	}
 
 
@@ -2487,6 +2500,24 @@ private:
 
 
 
+	// For catch blocks in range_assign(). An exception at the front of a group other than the first would leave that group empty at the back, so make the previous (full) group the back group instead. The empty group then goes to the unused groups, along with the groups after it:
+	void finish_range_assign_after_exception(iterator &it) noexcept
+	{
+		if (it.element_pointer == it.group_pointer->front() && it.group_pointer != begin_iterator.group_pointer)
+		{
+			it.group_pointer = it.group_pointer->previous_group;
+			it.element_pointer = it.group_pointer->past_back();
+			it.skipfield_pointer = it.group_pointer->skipfield + it.group_pointer->capacity;
+			make_back_group_range_assign(it);
+		}
+		else
+		{
+			finish_range_assign(it);
+		}
+	}
+
+
+
 	void check_iterator_end_of_block(const_iterator &it) noexcept
 	{
 		if constexpr (!std::is_trivially_destructible<element_type>::value)
@@ -2555,7 +2586,7 @@ private:
 										}
 
 										current.skipfield_pointer = current.group_pointer->skipfield + (current.element_pointer - current.group_pointer->front());
-										finish_range_assign(current);
+										finish_range_assign_after_exception(current);
 										throw;
 									}
 								} else
@@ -2593,7 +2624,7 @@ private:
 								catch (...)
 								{
 									if constexpr (!std::is_trivially_destructible<element_type>::value) destroy_remainder(current);
-									finish_range_assign(current);
+									finish_range_assign_after_exception(current);
 									throw;
 								}
 							} else
