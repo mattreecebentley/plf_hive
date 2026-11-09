@@ -635,7 +635,7 @@ public:
 	// Range constructors:
 
 	template<typename iterator_type>
-	hive(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
+	hive(const typename std::enable_if_t<!std::numeric_limits<std::decay_t<iterator_type>>::is_integer, iterator_type> &first, const iterator_type &last, const hive_limits block_limits, const allocator_type &alloc = allocator_type()):
 		allocator_type(alloc),
 		erasure_groups_head(nullptr),
 		unused_groups_head(nullptr),
@@ -655,7 +655,7 @@ public:
 
 
 	template<typename iterator_type>
-	hive(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last, const allocator_type &alloc = allocator_type()):
+	hive(const typename std::enable_if_t<!std::numeric_limits<std::decay_t<iterator_type>>::is_integer, iterator_type> &first, const iterator_type &last, const allocator_type &alloc = allocator_type()):
 		hive(first, last, block_capacity_default_limits(), alloc)
 	{}
 
@@ -1884,7 +1884,7 @@ public:
 	// Range insert:
 
 	template <class iterator_type>
-	void insert(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last)
+	void insert(const typename std::enable_if_t<!std::numeric_limits<std::decay_t<iterator_type>>::is_integer, iterator_type> &first, const iterator_type &last)
 	{
 		range_insert(first, static_cast<size_type>(std::distance(first, last)));
 	}
@@ -2645,7 +2645,7 @@ public:
 	// Range assign:
 
 	template <class iterator_type>
-	void assign(const typename std::enable_if_t<!std::numeric_limits<iterator_type>::is_integer, iterator_type> &first, const iterator_type &last)
+	void assign(const typename std::enable_if_t<!std::numeric_limits<std::decay_t<iterator_type>>::is_integer, iterator_type> &first, const iterator_type &last)
 	{
 		range_assign(first, static_cast<size_type>(std::distance(first, last)));
 	}
