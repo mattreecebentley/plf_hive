@@ -105,6 +105,36 @@ struct exceptions_test
 
 
 
+int counted_exceptions_live = 0; // Number of counted_exceptions_test objects currently alive
+
+
+
+struct counted_exceptions_test // As exceptions_test, but not trivially destructible, and counts live objects so that destroying an unconstructed element is detected
+{
+	int num;
+
+	counted_exceptions_test(const int num2) noexcept: num(num2) { ++counted_exceptions_live; };
+
+	counted_exceptions_test(const counted_exceptions_test &et): num(et.num)
+	{
+		if (et.num == 4) throw 123;
+		++counted_exceptions_live;
+	};
+
+	counted_exceptions_test & operator = (const counted_exceptions_test &et) noexcept
+	{
+		num = et.num;
+		return *this;
+	};
+
+	~counted_exceptions_test() noexcept
+	{
+		--counted_exceptions_live;
+	};
+};
+
+
+
 class non_copyable_type
 {
 private:
@@ -2857,6 +2887,140 @@ int main()
 			}
 
 			failpass("fill-insert into skip-block exceptions test", static_cast<int>(i_hive.size()) == 14 && accumulator == 34);
+		}
+
+		{
+			title2("Exception at the front of a new block tests");
+
+			// A copy that throws at the front of a new block must not leave an empty block at the back of the hive:
+			{
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(3, counted_exceptions_test(6)); // Fill the first block
+
+				try
+				{
+					i_hive.insert(4, counted_exceptions_test(4)); // The copy into the front of the second block throws
+				}
+				catch(...)
+				{} // do nothing
+			}
+
+			failpass("Destruction straight after fill-insert exception test", counted_exceptions_live == 0);
+
+			{
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(3, counted_exceptions_test(6)); // Fill the first block
+
+				try
+				{
+					i_hive.insert(4, counted_exceptions_test(4)); // The copy into the front of the second block throws
+				}
+				catch(...)
+				{} // do nothing
+
+				int accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Fill-insert exception at front of new block test", i_hive.size() == 3 && accumulator == 18 && counted_exceptions_live == 3);
+
+				i_hive.insert(2, counted_exceptions_test(1));
+				accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Fill-insert after exception at front of new block test", i_hive.size() == 5 && accumulator == 20 && counted_exceptions_live == 5);
+			}
+
+			failpass("Destruction after fill-insert exception test", counted_exceptions_live == 0);
+
+			{
+				// As above, but the new block is the last reserved block, so is filled by the final-block part of the fill:
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(3, counted_exceptions_test(6));
+				i_hive.reserve(9);
+
+				try
+				{
+					i_hive.insert(2, counted_exceptions_test(4));
+				}
+				catch(...)
+				{} // do nothing
+
+				failpass("Fill-insert exception at front of final block test", i_hive.size() == 3 && i_hive.capacity() == 9 && counted_exceptions_live == 3);
+
+				i_hive.insert(5, counted_exceptions_test(1)); // Must reuse the reserved blocks
+				int accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Fill-insert into reserved blocks after exception test", i_hive.size() == 8 && i_hive.capacity() == 9 && accumulator == 23 && counted_exceptions_live == 8);
+
+				i_hive.clear();
+				failpass("Clear after fill-insert exception test", i_hive.empty() && counted_exceptions_live == 0);
+			}
+
+			failpass("Destruction after final block fill-insert exception test", counted_exceptions_live == 0);
+
+			{
+				const counted_exceptions_test input_data[4] = {4, 6, 6, 6};
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(3, counted_exceptions_test(6));
+
+				try
+				{
+					i_hive.insert(input_data, input_data + 4); // The copy into the front of the second block throws
+				}
+				catch(...)
+				{} // do nothing
+
+				int accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Range-insert exception at front of new block test", i_hive.size() == 3 && accumulator == 18 && counted_exceptions_live == 7);
+			}
+
+			failpass("Destruction after range-insert exception test", counted_exceptions_live == 0);
+
+			{
+				const counted_exceptions_test input_data[5] = {6, 6, 6, 4, 6};
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(9, counted_exceptions_test(6)); // Three full blocks
+				i_hive.erase(std::next(i_hive.begin(), 3)); // Erase the front of the second block, so range assign constructs (rather than assigns) there
+
+				try
+				{
+					i_hive.assign(input_data, input_data + 5); // The copy into the front of the second block throws
+				}
+				catch(...)
+				{} // do nothing
+			}
+
+			failpass("Destruction straight after range-assign exception test", counted_exceptions_live == 0);
+
+			{
+				const counted_exceptions_test input_data[5] = {6, 6, 6, 4, 6};
+				hive<counted_exceptions_test> i_hive(plf::hive_limits(3, 3));
+				i_hive.insert(9, counted_exceptions_test(6)); // Three full blocks
+				i_hive.erase(std::next(i_hive.begin(), 3)); // Erase the front of the second block, so range assign constructs (rather than assigns) there
+
+				try
+				{
+					i_hive.assign(input_data, input_data + 5); // The copy into the front of the second block throws
+				}
+				catch(...)
+				{} // do nothing
+
+				int accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Range-assign exception at front of block test", i_hive.size() == 3 && accumulator == 18 && counted_exceptions_live == 8);
+
+				i_hive.insert(4, counted_exceptions_test(1));
+				accumulator = 0;
+				for (hive<counted_exceptions_test>::iterator current = i_hive.begin(); current != i_hive.end(); ++current) accumulator += current->num;
+
+				failpass("Fill-insert after range-assign exception test", i_hive.size() == 7 && accumulator == 22 && counted_exceptions_live == 12);
+			}
+
+			failpass("Destruction after range-assign exception test", counted_exceptions_live == 0);
 		}
 	}
 
