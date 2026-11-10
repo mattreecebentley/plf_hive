@@ -1693,6 +1693,20 @@ int main()
 				failpass("Fill insertion for 1-byte types test", uc_hive.size() == 10 && uc_total == 19);
 			}
 
+			{
+				// A string literal value is an array, so it must not be taken for the iterator type of a range overload:
+				hive<std::string> s_hive(3, "a");
+				s_hive.insert(2, "b");
+				hive<const char *> p_hive(4, "c");
+				const char *input[2] = {"d", "e"};
+				hive<std::string> r_hive(input, input + 2);
+
+				failpass("Fill construction and insertion from string literal test", s_hive.size() == 5 && std::count(s_hive.begin(), s_hive.end(), "a") == 3 && p_hive.size() == 4 && r_hive.size() == 2 && *r_hive.begin() == "d");
+
+				s_hive.assign(4, "f");
+				failpass("Fill assign from string literal test", s_hive.size() == 4 && std::count(s_hive.begin(), s_hive.end(), "f") == 4);
+			}
+
 
 
 			std::vector<int> some_ints(500, 2);
