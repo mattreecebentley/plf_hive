@@ -68,20 +68,12 @@ namespace plf
 
 
 
-	// Applies f to the elements in [first, last), in order, until f returns false.
+	// Applies f to the elements in [first, last), in order, until f returns false. Equivalent to: 'while (first != last && f(*first)) ++first; return std::make_pair<it_type, function_type>(std::move(first), std::move(f));'
 	// Faster than iterating, as runs of non-erased elements are found several skipfield nodes at a time. f must not insert into or erase from the hive.
 	template <hive_forward_iterator_concept it_type, class function_type>
 	std::pair<it_type, function_type> for_each_while(it_type first, const it_type last, function_type f)
 	{
-		if consteval // As the visit function uses memcpy
-		{
-			while (first != last && f(*first)) ++first;
-			return std::make_pair<it_type, function_type>(std::move(first), std::move(f));
-		}
-		else
-		{
-			return it_type::visit(first, last, std::move(f));
-		}
+		return it_type::visit(first, last, std::move(f));
 	}
 
 
