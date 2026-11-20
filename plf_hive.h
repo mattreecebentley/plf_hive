@@ -1353,7 +1353,7 @@ private:
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)
 			{
 				aligned_element_struct aligned_copy;
-				std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+				std::memcpy(&aligned_copy, &element, sizeof(element_type));
 				uninitialized_fill_n(end_iterator.element_pointer, size, aligned_copy);
 			}
 			else
@@ -1430,7 +1430,7 @@ private:
 			if constexpr (sizeof(aligned_element_struct) != sizeof(element_type) && std::is_trivially_copyable<element_type>::value)
 			{
 				aligned_element_struct aligned_copy;
-				std::memcpy(static_cast<void *>(&aligned_copy), static_cast<const void *>(&element), sizeof(element_type));
+				std::memcpy(&aligned_copy, &element, sizeof(element_type));
 				uninitialized_fill_n(location, size, aligned_copy);
 			}
 			else
@@ -4188,7 +4188,7 @@ public:
 					while (scan_words && few_erasures && index + nodes_per_word <= end_index) // index is always a non-erased element here
 					{
 						std::uint64_t word;
-						std::memcpy(static_cast<void *>(&word), static_cast<const void *>(skipfield + index), sizeof(word));
+						std::memcpy(&word, skipfield + index, sizeof(word));
 						const std::uint64_t non_erased = ~(((word & low_bits) + low_bits) | word) & top_bits; // The top bit of each zero node
 
 						if (non_erased == top_bits) // No erased nodes in this word
