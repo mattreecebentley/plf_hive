@@ -4136,12 +4136,21 @@ public:
 
 
 	private:
+	
 		// Used by cend(), erase() etc:
 		hive_iterator(const group_pointer_type group_p, const aligned_pointer_type element_p, const skipfield_pointer_type skipfield_p) noexcept:
 			group_pointer(group_p),
 			element_pointer(element_p),
 			skipfield_pointer(skipfield_p)
 		{}
+
+
+
+  		template <class function_type>
+		static std::pair<hive_iterator, function_type> visit_result(const group_pointer_type current_group, const std::size_t index, function_type &f)
+		{
+			return std::pair<hive_iterator, function_type>(hive_iterator(current_group, current_group->front() + index, current_group->skipfield + index), std::move(f));
+		}
 
 
 
@@ -4153,7 +4162,8 @@ public:
 		template <class function_type>
 		static std::pair<hive_iterator, function_type> visit(const hive_iterator first, const hive_iterator last, function_type f)
 		{
-			if (first == last) return {last, std::move(f)}; // Also covers an empty hive, which has no groups
+			if (first == last) [[unlikely]] return {last, std::move(f)}; // Also covers an empty hive, which has no groups
+			assert (first < last);
 
 			constexpr bool scan_words = std::endian::native == std::endian::little; // Node order within a loaded word is only known for little-endian
 			constexpr std::size_t node_bits = sizeof(skipfield_type) * 8, nodes_per_word = sizeof(std::uint64_t) / sizeof(skipfield_type);
@@ -4162,8 +4172,6 @@ public:
 
 			for (group_pointer_type current_group = first.group_pointer;; current_group = current_group->next_group)
 			{
-				assert(current_group != nullptr); // ie. last is not reachable from first
-
 				const pointer elements = pointer_cast<pointer>(current_group->front()); // const-qualified for const_iterator, so a const hive's elements cannot be modified through f
 				const skipfield_type * const skipfield = std::to_address(current_group->skipfield);
 				const std::size_t end_index = static_cast<std::size_t>(((current_group == last.group_pointer) ? last.element_pointer : current_group->past_back()) - current_group->front());
@@ -4180,14 +4188,14 @@ public:
 					while (scan_words && few_erasures && index + nodes_per_word <= end_index) // index is always a non-erased element here
 					{
 						std::uint64_t word;
-						std::memcpy(&word, skipfield + index, sizeof(word));
+						std::memcpy(static_cast<void *>(&word), static_cast<const void *>(skipfield + index), sizeof(word));
 						const std::uint64_t non_erased = ~(((word & low_bits) + low_bits) | word) & top_bits; // The top bit of each zero node
 
 						if (non_erased == top_bits) // No erased nodes in this word
 						{
 							for (const std::size_t word_end = index + nodes_per_word; index != word_end; ++index)
 							{
-								if (!f(elements[index])) goto stopped;
+								if (!f(elements[index])) return visit_result(current_group, index, f);
 							}
 						}
 						else
@@ -4195,12 +4203,7 @@ public:
 							for (std::uint64_t remaining = non_erased; remaining != 0; remaining &= remaining - 1) // Visit each non-erased node, lowest first
 							{
 								const std::size_t element_index = index + static_cast<std::size_t>(std::countr_zero(remaining)) / node_bits;
-
-								if (!f(elements[element_index]))
-								{
-									index = element_index;
-									goto stopped;
-								}
+								if (!f(elements[element_index])) return visit_result(current_group, element_index, f);
 							}
 
 							index += static_cast<std::size_t>(64 - std::countl_zero(non_erased)) / node_bits; // One past the last non-erased node
@@ -4211,17 +4214,11 @@ public:
 
 					while (index < end_index && f(elements[index])) // The remaining nodes, via the skipfield, as operator ++ does
 					{
-						++index;
-						index += skipfield[index];
+						index += skipfield[++index];
 					}
 				}
 
-				if (index < end_index)
-				{
-					stopped:
-					return {hive_iterator(current_group, current_group->front() + index, current_group->skipfield + index), std::move(f)};
-				}
-
+				if (index < end_index) return visit_result(current_group, index, f);
 				if (current_group == last.group_pointer) return {last, std::move(f)};
 			}
 		}
